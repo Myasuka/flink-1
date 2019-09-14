@@ -543,6 +543,24 @@ public class FlinkSqlParserImplTest extends SqlParserTest {
 	}
 
 	@Test
+	public void testCreateFunction() {
+		String sql = "CREATE FUNCTION catalog1.db1.function1 AS 'org.apache.fink.function.function1'";
+		check(sql, "CREATE FUNCTION `CATALOG1`.`DB1`.`FUNCTION1` AS 'org.apache.fink.function.function1'");
+	}
+
+	@Test
+	public void testDropFunction() {
+		String sql = "DROP FUNCTION catalog1.db1.function1";
+		check(sql, "DROP FUNCTION `CATALOG1`.`DB1`.`FUNCTION1`");
+	}
+
+	@Test
+	public void testDropFunctionIfExists() {
+		String sql = "DROP FUNCTION IF EXISTS catalog1.db1.function1";
+		check(sql, "DROP FUNCTION IF EXISTS `CATALOG1`.`DB1`.`FUNCTION1`");
+	}
+
+	@Test
 	public void testInsertPartitionSpecs() {
 		conformance0 = FlinkSqlConformance.HIVE;
 		final String sql1 = "insert into emps(x,y) partition (x='ab', y='bc') select * from emps";
