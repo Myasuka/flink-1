@@ -548,6 +548,35 @@ public class CatalogManager {
 	}
 
 	/**
+	 * Create a function in a given fully qualified path.
+	 *
+	 * @param catalogFunction  The function to put in the given path
+	 * @param objectIdentifier
+	 * @param ignoreIfExists
+	 */
+	public void createFunction(CatalogFunction catalogFunction, ObjectIdentifier objectIdentifier, boolean ignoreIfExists) {
+		execute(
+			(catalog, path) -> catalog.createFunction(path, catalogFunction, ignoreIfExists),
+			objectIdentifier,
+			ignoreIfExists,
+			"CreateFunction");
+	}
+
+	/**
+	 * Drops a function in a given fully qualified path.
+	 *
+	 * @param objectIdentifier
+	 * @param ignoreIfExists
+	 */
+	public void dropFunction(ObjectIdentifier objectIdentifier, boolean ignoreIfExists) {
+		execute(
+			(catalog, path) -> catalog.dropFunction(path, ignoreIfExists),
+			objectIdentifier,
+			ignoreIfExists,
+			"DropFunction");
+	}
+
+	/**
 	 * A command that modifies given {@link Catalog} in an {@link ObjectPath}. This unifies error handling
 	 * across different commands.
 	 */

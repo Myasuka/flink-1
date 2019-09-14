@@ -227,7 +227,7 @@ public class BootstrapTools {
 	 * @param logger the logger to output log information.
 	 * @param actorSystemExecutorConfiguration configuration for the ActorSystem's underlying executor
 	 * @return The ActorSystem which has been started.
-	 * @throws Exception
+	 * @throws ExceptionTableEnvironmentImpl
 	 */
 	public static ActorSystem startActorSystem(
 		Configuration configuration,

@@ -18,7 +18,9 @@
 
 package org.apache.flink.table.sqlexec;
 
+import org.apache.flink.sql.parser.ddl.SqlCreateFunction;
 import org.apache.flink.sql.parser.ddl.SqlCreateTable;
+import org.apache.flink.sql.parser.ddl.SqlDropFunction;
 import org.apache.flink.sql.parser.ddl.SqlDropTable;
 import org.apache.flink.sql.parser.ddl.SqlTableColumn;
 import org.apache.flink.sql.parser.ddl.SqlTableOption;
@@ -29,6 +31,8 @@ import org.apache.flink.table.api.ValidationException;
 import org.apache.flink.table.calcite.FlinkPlannerImpl;
 import org.apache.flink.table.calcite.FlinkTypeFactory;
 import org.apache.flink.table.catalog.CatalogManager;
+import org.apache.flink.table.catalog.CatalogFunction;
+import org.apache.flink.table.catalog.CatalogFunctionImpl;
 import org.apache.flink.table.catalog.CatalogTable;
 import org.apache.flink.table.catalog.CatalogTableImpl;
 import org.apache.flink.table.catalog.ObjectIdentifier;
@@ -36,7 +40,9 @@ import org.apache.flink.table.catalog.UnresolvedIdentifier;
 import org.apache.flink.table.operations.CatalogSinkModifyOperation;
 import org.apache.flink.table.operations.Operation;
 import org.apache.flink.table.operations.PlannerQueryOperation;
+import org.apache.flink.table.operations.ddl.CreateFunctionOperation;
 import org.apache.flink.table.operations.ddl.CreateTableOperation;
+import org.apache.flink.table.operations.ddl.DropFunctionOperation;
 import org.apache.flink.table.operations.ddl.DropTableOperation;
 import org.apache.flink.table.types.utils.TypeConversions;
 
@@ -96,6 +102,10 @@ public class SqlToOperationConverter {
 			return Optional.of(converter.convertCreateTable((SqlCreateTable) validated));
 		} if (validated instanceof SqlDropTable) {
 			return Optional.of(converter.convertDropTable((SqlDropTable) validated));
+		} else if (validated instanceof SqlCreateFunction) {
+			return Optional.of(converter.convertCreateFunction((SqlCreateFunction) validated));
+		} else if (validated instanceof SqlDropFunction) {
+			return Optional.of(converter.convertDropFunction((SqlDropFunction) validated));
 		} else if (validated instanceof RichSqlInsert) {
 			SqlNodeList targetColumnList = ((RichSqlInsert) validated).getTargetColumnList();
 			if (targetColumnList != null && targetColumnList.size() != 0) {
@@ -160,6 +170,27 @@ public class SqlToOperationConverter {
 		ObjectIdentifier identifier = catalogManager.qualifyIdentifier(unresolvedIdentifier);
 
 		return new DropTableOperation(identifier, sqlDropTable.getIfExists());
+	}
+
+	/** Convert CREATE FUNCTION statement. */
+	private Operation convertCreateFunction(SqlCreateFunction sqlCreateFunction) {
+		UnresolvedIdentifier unresolvedIdentifier = UnresolvedIdentifier.of(sqlCreateFunction.fullFunctionName());
+		ObjectIdentifier identifier = catalogManager.qualifyIdentifier(unresolvedIdentifier);
+		CatalogFunction catalogFunction =
+			new CatalogFunctionImpl(
+				sqlCreateFunction.getFunctionClassName().toString(),
+				new HashMap<String, String>());
+		return new CreateFunctionOperation(
+			identifier,
+			catalogFunction,
+			sqlCreateFunction.isIfNotExists());
+	}
+
+	/** Convert DROP FUNCTION statement. */
+	private Operation convertDropFunction(SqlDropFunction sqlDropFunction) {
+		UnresolvedIdentifier unresolvedIdentifier = UnresolvedIdentifier.of(sqlDropFunction.fullFunctionName());
+		ObjectIdentifier identifier = catalogManager.qualifyIdentifier(unresolvedIdentifier);
+		return  new DropFunctionOperation(identifier, sqlDropFunction.getIfExists());
 	}
 
 	/** Fallback method for sql query. */
