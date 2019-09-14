@@ -18,7 +18,9 @@
 
 package org.apache.flink.table.sqlexec;
 
+import org.apache.flink.sql.parser.ddl.SqlCreateFunction;
 import org.apache.flink.sql.parser.ddl.SqlCreateTable;
+import org.apache.flink.sql.parser.ddl.SqlDropFunction;
 import org.apache.flink.sql.parser.dml.RichSqlInsert;
 import org.apache.flink.table.api.DataTypes;
 import org.apache.flink.table.api.SqlDialect;
@@ -29,6 +31,7 @@ import org.apache.flink.table.api.Types;
 import org.apache.flink.table.calcite.CalciteParser;
 import org.apache.flink.table.calcite.FlinkPlannerImpl;
 import org.apache.flink.table.catalog.Catalog;
+import org.apache.flink.table.catalog.CatalogFunction;
 import org.apache.flink.table.catalog.CatalogManager;
 import org.apache.flink.table.catalog.CatalogManagerCalciteSchema;
 import org.apache.flink.table.catalog.CatalogTable;
@@ -44,7 +47,9 @@ import org.apache.flink.table.expressions.PlannerExpressionConverter;
 import org.apache.flink.table.module.ModuleManager;
 import org.apache.flink.table.operations.CatalogSinkModifyOperation;
 import org.apache.flink.table.operations.Operation;
+import org.apache.flink.table.operations.ddl.CreateFunctionOperation;
 import org.apache.flink.table.operations.ddl.CreateTableOperation;
+import org.apache.flink.table.operations.ddl.DropFunctionOperation;
 import org.apache.flink.table.planner.PlanningConfigurationBuilder;
 import org.apache.flink.table.types.DataType;
 import org.apache.flink.table.types.utils.TypeConversions;
@@ -52,6 +57,7 @@ import org.apache.flink.table.types.utils.TypeConversions;
 import org.apache.calcite.sql.SqlNode;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
@@ -404,6 +410,29 @@ public class SqlToOperationConverterTest {
 			expectedEx.expectMessage(item.expectedError);
 			SqlToOperationConverter.convert(planner, catalogManager, node);
 		}
+	}
+
+	@Ignore("Blocked by CALCITE-3349")
+	public void testCreateFunction() {
+		final String sql = "CREATE FUNCTION func1 AS 'org.apache.flink.function.function1'";
+		final FlinkPlannerImpl planner = getPlannerBySqlDialect(SqlDialect.DEFAULT);
+		SqlNode node = planner.parse(sql);
+		assert node instanceof SqlCreateFunction;
+		Operation operation = SqlToOperationConverter.convert(planner, node);
+		assert operation instanceof CreateFunctionOperation;
+		CreateFunctionOperation op = (CreateFunctionOperation) operation;
+		CatalogFunction catalogFunction = op.getCatalogFunction();
+		assertEquals("org.apache.flink.function.function1", catalogFunction.getClassName());
+	}
+
+	@Ignore("Blocked by CALCITE-3349")
+	public void testDropFunction() {
+		final String sql = "DROP FUNCTION func1";
+		final FlinkPlannerImpl planner = getPlannerBySqlDialect(SqlDialect.DEFAULT);
+		SqlNode node = planner.parse(sql);
+		assert node instanceof SqlDropFunction;
+		Operation operation = SqlToOperationConverter.convert(planner, node);
+		assert operation instanceof DropFunctionOperation;
 	}
 
 	//~ Tool Methods ----------------------------------------------------------

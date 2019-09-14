@@ -190,6 +190,24 @@ SqlNodeList TableProperties():
     {  return new SqlNodeList(proList, span.end(this)); }
 }
 
+SqlCreate SqlCreateFunction(Span s, boolean replace) :
+{
+    SqlIdentifier functionName = null;
+    SqlCharStringLiteral functionClassName = null;
+}
+{
+    <FUNCTION>
+
+    functionName = CompoundIdentifier()
+    [ <AS> <QUOTED_STRING> {
+        String p = SqlParserUtil.parseString(token.image);
+        functionClassName = SqlLiteral.createCharString(p, getPos());
+    }]
+    {
+        return new SqlCreateFunction(s.pos(), functionName, functionClassName);
+    }
+}
+
 SqlCreate SqlCreateTable(Span s, boolean replace) :
 {
     final SqlParserPos startPos = s.pos();
@@ -266,6 +284,27 @@ SqlDrop SqlDropTable(Span s, boolean replace) :
 
     {
          return new SqlDropTable(s.pos(), tableName, ifExists);
+    }
+}
+
+SqlDrop SqlDropFunction(Span s, boolean replace) :
+{
+    SqlIdentifier functionName = null;
+    boolean ifExists = false;
+}
+{
+    <FUNCTION>
+
+    (
+        <IF> <EXISTS> { ifExists = true; }
+    |
+        { ifExists = false; }
+    )
+
+    functionName = CompoundIdentifier()
+
+    {
+        return new SqlDropFunction(s.pos(), functionName, ifExists);
     }
 }
 
