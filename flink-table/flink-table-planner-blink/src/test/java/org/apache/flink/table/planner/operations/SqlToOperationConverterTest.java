@@ -18,7 +18,9 @@
 
 package org.apache.flink.table.planner.operations;
 
+import org.apache.flink.sql.parser.ddl.SqlCreateFunction;
 import org.apache.flink.sql.parser.ddl.SqlCreateTable;
+import org.apache.flink.sql.parser.ddl.SqlDropFunction;
 import org.apache.flink.table.api.DataTypes;
 import org.apache.flink.table.api.SqlDialect;
 import org.apache.flink.table.api.TableColumn;
@@ -26,7 +28,10 @@ import org.apache.flink.table.api.TableConfig;
 import org.apache.flink.table.api.TableSchema;
 import org.apache.flink.table.catalog.Catalog;
 import org.apache.flink.table.catalog.CatalogFunction;
+<<<<<<< HEAD:flink-table/flink-table-planner-blink/src/test/java/org/apache/flink/table/planner/operations/SqlToOperationConverterTest.java
 import org.apache.flink.table.catalog.CatalogFunctionImpl;
+=======
+>>>>>>> add create, drop funtion into SqlKind enum:flink-table/flink-table-planner-blink/src/test/java/org/apache/flink/table/sqlexec/SqlToOperationConverterTest.java
 import org.apache.flink.table.catalog.CatalogManager;
 import org.apache.flink.table.catalog.CatalogTable;
 import org.apache.flink.table.catalog.CatalogTableImpl;
@@ -41,8 +46,13 @@ import org.apache.flink.table.catalog.exceptions.TableNotExistException;
 import org.apache.flink.table.module.ModuleManager;
 import org.apache.flink.table.operations.CatalogSinkModifyOperation;
 import org.apache.flink.table.operations.Operation;
+import org.apache.flink.table.operations.ddl.CreateFunctionOperation;
 import org.apache.flink.table.operations.ddl.CreateTableOperation;
+<<<<<<< HEAD:flink-table/flink-table-planner-blink/src/test/java/org/apache/flink/table/planner/operations/SqlToOperationConverterTest.java
 import org.apache.flink.table.planner.calcite.CalciteParser;
+=======
+import org.apache.flink.table.operations.ddl.DropFunctionOperation;
+>>>>>>> add create, drop funtion into SqlKind enum:flink-table/flink-table-planner-blink/src/test/java/org/apache/flink/table/sqlexec/SqlToOperationConverterTest.java
 import org.apache.flink.table.planner.calcite.FlinkPlannerImpl;
 import org.apache.flink.table.planner.catalog.CatalogManagerCalciteSchema;
 import org.apache.flink.table.planner.delegation.PlannerContext;
@@ -384,6 +394,7 @@ public class SqlToOperationConverterTest {
 	}
 
 	@Test
+<<<<<<< HEAD:flink-table/flink-table-planner-blink/src/test/java/org/apache/flink/table/planner/operations/SqlToOperationConverterTest.java
 	public void testCreateTableWithComputedColumn() {
 		final String sql = "CREATE TABLE tbl1 (\n" +
 			"  a int,\n" +
@@ -423,6 +434,28 @@ public class SqlToOperationConverterTest {
 		assertArrayEquals(
 			new String[] {"`a` - 1", "`b` || '$$'", "`my_catalog`.`my_database`.`my_udf`(`a`)"},
 			columnExpressions);
+=======
+	public void testCreateFunction() {
+		final String sql = "CREATE FUNCTION func1 AS 'org.apache.flink.function.function1'";
+		final FlinkPlannerImpl planner = getPlannerBySqlDialect(SqlDialect.DEFAULT);
+		SqlNode node = planner.parse(sql);
+		assert node instanceof SqlCreateFunction;
+		Operation operation = SqlToOperationConverter.convert(planner, node);
+		assert operation instanceof CreateFunctionOperation;
+		CreateFunctionOperation op = (CreateFunctionOperation) operation;
+		CatalogFunction catalogFunction = op.getCatalogFunction();
+		assertEquals("org.apache.flink.function.function1", catalogFunction.getClassName());
+	}
+
+	@Test
+	public void testDropFunction() {
+		final String sql = "DROP FUNCTION func1";
+		final FlinkPlannerImpl planner = getPlannerBySqlDialect(SqlDialect.DEFAULT);
+		SqlNode node = planner.parse(sql);
+		assert node instanceof SqlDropFunction;
+		Operation operation = SqlToOperationConverter.convert(planner, node);
+		assert operation instanceof DropFunctionOperation;
+>>>>>>> add create, drop funtion into SqlKind enum:flink-table/flink-table-planner-blink/src/test/java/org/apache/flink/table/sqlexec/SqlToOperationConverterTest.java
 	}
 
 	//~ Tool Methods ----------------------------------------------------------
