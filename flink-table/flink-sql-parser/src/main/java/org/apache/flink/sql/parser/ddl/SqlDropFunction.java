@@ -43,7 +43,7 @@ public class SqlDropFunction extends SqlDrop implements ExtendedSqlNode {
 	public static final SqlSpecialOperator OPERATOR = new SqlSpecialOperator("DROP FUNCTION", SqlKind.DROP_FUNCTION);
 
 	private SqlIdentifier functionName;
-	protected final boolean ifExists;
+	protected boolean ifExists;
 
 	public SqlDropFunction(SqlParserPos pos, SqlIdentifier functionName, boolean ifExists) {
 		super(OPERATOR, pos, ifExists);
@@ -78,5 +78,9 @@ public class SqlDropFunction extends SqlDrop implements ExtendedSqlNode {
 
 	public boolean getIfExists() {
 		return this.ifExists;
+	}
+
+	public void setIfExists(boolean ifExists) {
+		this.ifExists = ifExists;
 	}
 }
