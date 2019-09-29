@@ -356,17 +356,22 @@ SqlCreate SqlCreateFunction(Span s, boolean replace) :
 {
     SqlIdentifier functionName = null;
     SqlCharStringLiteral functionClassName = null;
+    boolean ifNotExists = false;
 }
 {
     <FUNCTION>
-
+    (
+        <IF> <NOT> <EXISTS> { ifNotExists = true; }
+    |
+        { ifNotExists = false; }
+    )
     functionName = CompoundIdentifier()
     [ <AS> <QUOTED_STRING> {
         String p = SqlParserUtil.parseString(token.image);
         functionClassName = SqlLiteral.createCharString(p, getPos());
     }]
     {
-        return new SqlCreateFunction(s.pos(), functionName, functionClassName);
+        return new SqlCreateFunction(s.pos(), functionName, functionClassName, ifNotExists);
     }
 }
 
