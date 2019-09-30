@@ -19,7 +19,7 @@
 package org.apache.flink.sql.parser.ddl;
 
 import org.apache.flink.sql.parser.ExtendedSqlNode;
-import org.apache.flink.sql.parser.error.SqlParseException;
+import org.apache.flink.sql.parser.error.SqlValidateException;
 
 import org.apache.calcite.sql.SqlDrop;
 import org.apache.calcite.sql.SqlIdentifier;
@@ -68,7 +68,7 @@ public class SqlDropFunction extends SqlDrop implements ExtendedSqlNode {
 	}
 
 	@Override
-	public void validate() throws SqlParseException {
+	public void validate() throws SqlValidateException {
 		// no-op
 	}
 
