@@ -29,6 +29,8 @@
     "org.apache.flink.sql.parser.ddl.SqlCreateTable.TableCreationContext",
     "org.apache.flink.sql.parser.ddl.SqlCreateView",
     "org.apache.flink.sql.parser.ddl.SqlDropView",
+    "org.apache.flink.sql.parser.ddl.SqlCreateFunction",
+    "org.apache.flink.sql.parser.ddl.SqlDropFunction",
     "org.apache.flink.sql.parser.ddl.SqlTableColumn",
     "org.apache.flink.sql.parser.ddl.SqlTableOption",
     "org.apache.flink.sql.parser.ddl.SqlWatermark",
