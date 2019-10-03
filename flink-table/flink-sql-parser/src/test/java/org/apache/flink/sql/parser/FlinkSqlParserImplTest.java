@@ -549,6 +549,12 @@ public class FlinkSqlParserImplTest extends SqlParserTest {
 	}
 
 	@Test
+	public void testCreateFuntionIfNotExist() {
+		String sql = "CREATE FUNCTION IF NOT EXISTS catalog1.db1.function1 AS 'org.apache.fink.function.function1'";
+		check(sql, "CREATE FUNCTION IF NOT EXISTS `CATALOG1`.`DB1`.`FUNCTION1` AS 'org.apache.fink.function.function1'");
+	}
+
+	@Test
 	public void testDropFunction() {
 		String sql = "DROP FUNCTION catalog1.db1.function1";
 		check(sql, "DROP FUNCTION `CATALOG1`.`DB1`.`FUNCTION1`");
