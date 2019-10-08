@@ -45,6 +45,7 @@ import _root_.java.util.function.{Supplier => JSupplier}
 import _root_.java.util.{Optional, HashMap => JHashMap, Map => JMap}
 
 import _root_.scala.collection.JavaConverters._
+import _root_.scala.collection.JavaConversions._
 import _root_.scala.util.Try
 
 /**
