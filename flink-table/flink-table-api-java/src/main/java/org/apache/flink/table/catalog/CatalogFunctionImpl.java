@@ -33,7 +33,6 @@ import static org.apache.flink.util.Preconditions.checkNotNull;
 public class CatalogFunctionImpl implements CatalogFunction {
 	private final String className; // Fully qualified class name of the function
 	private final Map<String, String> properties;
-
 	public CatalogFunctionImpl(String className, Map<String, String> properties) {
 		checkArgument(!StringUtils.isNullOrWhitespaceOnly(className), "className cannot be null or empty");
 
