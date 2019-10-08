@@ -475,7 +475,19 @@ public class FlinkSqlParserImplTest extends SqlParserTest {
 	}
 
 	@Test
-	public void testCreateFuntionIfNotExist() {
+	public void testCreateFunctionWithoutCatalog() {
+		String sql = "CREATE FUNCTION db1.function1 AS 'org.apache.fink.function.function1'";
+		check(sql, "CREATE FUNCTION `DB1`.`FUNCTION1` AS 'org.apache.fink.function.function1'");
+	}
+
+	@Test
+	public void testCreateFunctionWithOnlyName() {
+		String sql = "CREATE FUNCTION function1 AS 'org.apache.fink.function.function1'";
+		check(sql, "CREATE FUNCTION `FUNCTION1` AS 'org.apache.fink.function.function1'");
+	}
+
+	@Test
+	public void testCreateFunctionIfNotExist() {
 		String sql = "CREATE FUNCTION IF NOT EXISTS catalog1.db1.function1 AS 'org.apache.fink.function.function1'";
 		check(sql, "CREATE FUNCTION IF NOT EXISTS `CATALOG1`.`DB1`.`FUNCTION1` AS 'org.apache.fink.function.function1'");
 	}

@@ -551,8 +551,8 @@ public class CatalogManager {
 	 * Create a function in a given fully qualified path.
 	 *
 	 * @param catalogFunction  The function to put in the given path
-	 * @param objectIdentifier
-	 * @param ignoreIfExists
+	 * @param objectIdentifier  The fully qualified path of the function to create.
+	 * @param ignoreIfExists If false exception will be thrown if the function already exist
 	 */
 	public void createFunction(CatalogFunction catalogFunction, ObjectIdentifier objectIdentifier, boolean ignoreIfExists) {
 		execute(
@@ -565,14 +565,14 @@ public class CatalogManager {
 	/**
 	 * Drops a function in a given fully qualified path.
 	 *
-	 * @param objectIdentifier
-	 * @param ignoreIfExists
+	 * @param objectIdentifier The fully qualified path of the function to create.
+	 * @param ignoreIfNotExists  If false exception will be thrown if the function to be dropped doesn't exist
 	 */
-	public void dropFunction(ObjectIdentifier objectIdentifier, boolean ignoreIfExists) {
+	public void dropFunction(ObjectIdentifier objectIdentifier, boolean ignoreIfNotExists) {
 		execute(
-			(catalog, path) -> catalog.dropFunction(path, ignoreIfExists),
+			(catalog, path) -> catalog.dropFunction(path, ignoreIfNotExists),
 			objectIdentifier,
-			ignoreIfExists,
+			ignoreIfNotExists,
 			"DropFunction");
 	}
 
