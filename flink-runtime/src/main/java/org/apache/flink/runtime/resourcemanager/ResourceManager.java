@@ -367,6 +367,7 @@ public abstract class ResourceManager<WorkerType extends ResourceIDRetrievable>
 			final ResourceID taskExecutorResourceId,
 			final int dataPort,
 			final HardwareDescription hardwareDescription,
+			final ResourceProfile defaultSlotResourceProfile,
 			final Time timeout) {
 
 		CompletableFuture<TaskExecutorGateway> taskExecutorGatewayFuture = getRpcService().connect(taskExecutorAddress, TaskExecutorGateway.class);
