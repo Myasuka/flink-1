@@ -1212,9 +1212,5 @@ public abstract class ResourceManager<WorkerType extends ResourceIDRetrievable>
 		final ResourceProfile resourceProfile = TaskManagerServices.computeSlotResourceProfile(numSlots, managedMemoryBytes);
 		return Collections.nCopies(numSlots, resourceProfile);
 	}
-
-	public static TaskExecutorResourceSpec createTaskExecutorResourceSpec(Configuration config) {
-		return TaskExecutorResourceUtils.resourceSpecFromConfig(config);
-	}
 }
 

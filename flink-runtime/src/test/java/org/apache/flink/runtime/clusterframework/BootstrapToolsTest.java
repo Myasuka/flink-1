@@ -145,6 +145,7 @@ public class BootstrapToolsTest extends TestLogger {
 	public void testGetTaskManagerShellCommand() {
 		final Configuration cfg = new Configuration();
 		final TaskExecutorResourceSpec taskExecutorResourceSpec = new TaskExecutorResourceSpec(
+			1.0,
 			new MemorySize(0), // frameworkHeapSize
 			new MemorySize(0), // frameworkOffHeapSize
 			new MemorySize(111), // taskHeapSize
