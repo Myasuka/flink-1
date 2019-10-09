@@ -336,7 +336,15 @@ public class MesosTaskManagerParameters {
 
 		List<ConstraintEvaluator> constraints = parseConstraints(flinkConfig.getString(MESOS_CONSTRAINTS_HARD_HOSTATTR));
 
+		int numberOfSlot = flinkConfig.getInteger(MESOS_RM_TASKS_SLOTS);
+
+		double cpus = flinkConfig.getDouble(MESOS_RM_TASKS_CPUS);
+		if (cpus <= 0.0) {
+			cpus = Math.max(numberOfSlot, 1.0);
+		}
+
 		Configuration copiedConfig = new Configuration(flinkConfig);
+		copiedConfig.setDouble(TaskManagerOptions.CPU_CORES_KEY, cpus);
 		copiedConfig.setString(TaskManagerOptions.TOTAL_PROCESS_MEMORY, flinkConfig.getInteger(MESOS_RM_TASKS_MEMORY_MB) + "m");
 		TaskExecutorResourceSpec taskExecutorResourceSpec = TaskExecutorResourceUtils.resourceSpecFromConfig(copiedConfig);
 
@@ -344,12 +352,7 @@ public class MesosTaskManagerParameters {
 		ContaineredTaskManagerParameters containeredParameters = ContaineredTaskManagerParameters.create(
 			flinkConfig,
 			taskExecutorResourceSpec,
-			flinkConfig.getInteger(MESOS_RM_TASKS_SLOTS));
-
-		double cpus = flinkConfig.getDouble(MESOS_RM_TASKS_CPUS);
-		if (cpus <= 0.0) {
-			cpus = Math.max(containeredParameters.numSlots(), 1.0);
-		}
+			numberOfSlot);
 
 		int gpus = flinkConfig.getInteger(MESOS_RM_TASKS_GPUS);
 

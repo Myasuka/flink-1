@@ -1213,8 +1213,10 @@ public abstract class ResourceManager<WorkerType extends ResourceIDRetrievable>
 		return Collections.nCopies(numSlots, resourceProfile);
 	}
 
-	public static TaskExecutorResourceSpec createTaskExecutorResourceSpec(Configuration config) {
-		return TaskExecutorResourceUtils.resourceSpecFromConfig(config);
+	public static TaskExecutorResourceSpec createTaskExecutorResourceSpec(Configuration config, double cpuCores) {
+		Configuration copiedConfig = new Configuration(config);
+		copiedConfig.setDouble(TaskManagerOptions.CPU_CORES_KEY, cpuCores);
+		return TaskExecutorResourceUtils.resourceSpecFromConfig(copiedConfig);
 	}
 }
 

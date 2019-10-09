@@ -35,6 +35,13 @@ import static org.apache.flink.configuration.description.TextElement.text;
 @ConfigGroups(groups = @ConfigGroup(name = "TaskManagerMemory", keyPrefix = "taskmanager.memory"))
 public class TaskManagerOptions {
 
+	/**
+	 * This config key is used for passing cpu cores into TaskExecutors.
+	 * There're YarrConfigOptions#VCORES and MesosTaskManagerParameters#MESOS_RM_TASKS_CPUS for configuring TM container
+	 * CPU on Yarn and Mesos respectively.
+	 */
+	public static final String CPU_CORES_KEY = "taskmanager.cpu.cores";
+
 	// ------------------------------------------------------------------------
 	//  General TaskManager Options
 	// ------------------------------------------------------------------------

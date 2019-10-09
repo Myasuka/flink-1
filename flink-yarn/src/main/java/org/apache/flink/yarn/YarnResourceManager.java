@@ -179,9 +179,9 @@ public class YarnResourceManager extends ResourceManager<YarnWorkerNode> impleme
 		this.webInterfaceUrl = webInterfaceUrl;
 		this.numberOfTaskSlots = flinkConfig.getInteger(TaskManagerOptions.NUM_TASK_SLOTS);
 
-		this.taskExecutorResourceSpec = createTaskExecutorResourceSpec(flinkConfig);
-		this.defaultTaskManagerMemoryMB = taskExecutorResourceSpec.getTotalProcessMemorySize().getMebiBytes();
 		this.defaultCpus = flinkConfig.getInteger(YarnConfigOptions.VCORES, numberOfTaskSlots);
+		this.taskExecutorResourceSpec = createTaskExecutorResourceSpec(flinkConfig, defaultCpus);
+		this.defaultTaskManagerMemoryMB = taskExecutorResourceSpec.getTotalProcessMemorySize().getMebiBytes();
 		this.resource = Resource.newInstance(defaultTaskManagerMemoryMB, defaultCpus);
 
 		this.slotsPerWorker = createWorkerSlotProfiles(flinkConfig);
