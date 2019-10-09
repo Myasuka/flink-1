@@ -19,7 +19,9 @@
 package org.apache.flink.runtime.clusterframework;
 
 import org.apache.flink.configuration.MemorySize;
+import org.apache.flink.runtime.clusterframework.types.ResourceProfile;
 
+import java.util.Collections;
 import java.util.Optional;
 
 /**
@@ -96,6 +98,8 @@ public class TaskExecutorResourceSpec implements java.io.Serializable {
 
 	private final MemorySize jvmOverheadSize;
 
+	private final double defaultSlotFraction;
+
 	public TaskExecutorResourceSpec(
 		double cpuCores,
 		MemorySize frameworkHeapSize,
@@ -105,7 +109,8 @@ public class TaskExecutorResourceSpec implements java.io.Serializable {
 		MemorySize onHeapManagedMemorySize,
 		MemorySize offHeapManagedMemorySize,
 		MemorySize jvmMetaspaceSize,
-		MemorySize jvmOverheadSize) {
+		MemorySize jvmOverheadSize,
+		double defaultSlotFraction) {
 
 		this.cpuCores = cpuCores;
 		this.frameworkHeapSize = frameworkHeapSize;
@@ -116,6 +121,7 @@ public class TaskExecutorResourceSpec implements java.io.Serializable {
 		this.offHeapManagedMemorySize = offHeapManagedMemorySize;
 		this.jvmMetaspaceSize = jvmMetaspaceSize;
 		this.jvmOverheadSize = jvmOverheadSize;
+		this.defaultSlotFraction = defaultSlotFraction;
 	}
 
 	public Optional<Double> getCpuCores() {
@@ -178,6 +184,21 @@ public class TaskExecutorResourceSpec implements java.io.Serializable {
 		return taskOffHeapSize.add(shuffleMemSize);
 	}
 
+	public double getDefaultSlotFraction() {
+		return defaultSlotFraction;
+	}
+
+	public ResourceProfile getDefaultSlotResourceProfile() {
+		return new ResourceProfile(
+			cpuCores >= 0 ? cpuCores * defaultSlotFraction : Double.MAX_VALUE,
+			taskHeapSize.multiply(defaultSlotFraction),
+			taskOffHeapSize.multiply(defaultSlotFraction),
+			onHeapManagedMemorySize.multiply(defaultSlotFraction),
+			offHeapManagedMemorySize.multiply(defaultSlotFraction),
+			shuffleMemSize.multiply(defaultSlotFraction),
+			Collections.emptyMap());
+	}
+
 	@Override
 	public String toString() {
 		return "TaskExecutorResourceSpec {"
@@ -190,6 +211,7 @@ public class TaskExecutorResourceSpec implements java.io.Serializable {
 			+ ", offHeapManagedMemorySize=" + offHeapManagedMemorySize.toString()
 			+ ", jvmMetaspaceSize=" + jvmMetaspaceSize.toString()
 			+ ", jvmOverheadSize=" + jvmOverheadSize.toString()
+			+ ", defaultSlotFraction=" + defaultSlotFraction
 			+ "}";
 	}
 }
