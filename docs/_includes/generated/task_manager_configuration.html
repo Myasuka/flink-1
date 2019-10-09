@@ -38,6 +38,11 @@
             <td>The interval (in ms) for the log thread to log the current memory usage.</td>
         </tr>
         <tr>
+            <td><h5>taskmanager.default-slot-fraction</h5></td>
+            <td style="word-wrap: break-word;">-1.0</td>
+            <td>For operator or user function instances that do not specify their resource requirements, we use this fraction to decide how many resources of the task executor each slot should take. A default slot should have the configured fraction of the task executor resources on all resource dimensions (CPU, Memory). If the fraction is not explicitly configured (or configured with negative values), it will be derived from the legacy config option 'taskmanager.numberOfTaskSlots'.</td>
+        </tr>
+        <tr>
             <td><h5>taskmanager.exit-on-fatal-akka-error</h5></td>
             <td style="word-wrap: break-word;">false</td>
             <td>Whether the quarantine monitor for task managers shall be started. The quarantine monitor shuts down the actor system if it detects that it has quarantined another actor system or if it has been quarantined by another actor system.</td>
@@ -57,11 +62,6 @@
             <td style="word-wrap: break-word;">"ip"</td>
             <td>The automatic address binding policy used by the TaskManager if "taskmanager.host" is not set. The value should be one of the following:
 <ul><li>"name" - uses hostname as binding address</li><li>"ip" - uses host's ip address as binding address</li></ul></td>
-        </tr>
-        <tr>
-            <td><h5>taskmanager.numberOfTaskSlots</h5></td>
-            <td style="word-wrap: break-word;">1</td>
-            <td>The number of parallel operator or user function instances that a single TaskManager can run. If this value is larger than 1, a single TaskManager takes multiple instances of a function or operator. That way, the TaskManager can utilize multiple CPU cores, but at the same time, the available memory is divided between the different operator or function instances. This value is typically proportional to the number of physical CPU cores that the TaskManager's machine has (e.g., equal to the number of cores, or half the number of cores).</td>
         </tr>
         <tr>
             <td><h5>taskmanager.registration.initial-backoff</h5></td>
