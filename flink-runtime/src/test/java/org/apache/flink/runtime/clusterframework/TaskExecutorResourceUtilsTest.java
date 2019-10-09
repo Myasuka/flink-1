@@ -24,6 +24,7 @@ import org.apache.flink.configuration.ConfigurationUtils;
 import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.configuration.NettyShuffleEnvironmentOptions;
 import org.apache.flink.configuration.TaskManagerOptions;
+import org.apache.flink.runtime.clusterframework.types.ResourceProfile;
 import org.apache.flink.runtime.io.network.netty.NettyBufferPool;
 import org.apache.flink.util.TestLogger;
 
@@ -59,7 +60,8 @@ public class TaskExecutorResourceUtilsTest extends TestLogger {
 		MemorySize.parse("6m"),
 		MemorySize.parse("7m"),
 		MemorySize.parse("8m"),
-		MemorySize.parse("9m"));
+		MemorySize.parse("9m"),
+		0.5);
 
 	@Test
 	public void testGenerateDynamicConfigurations() {
@@ -75,6 +77,7 @@ public class TaskExecutorResourceUtilsTest extends TestLogger {
 		assertThat(MemorySize.parse(configs.get(TaskManagerOptions.SHUFFLE_MEMORY_MIN.key())), is(TM_RESOURCE_SPEC.getShuffleMemSize()));
 		assertThat(MemorySize.parse(configs.get(TaskManagerOptions.MANAGED_MEMORY_SIZE.key())), is(TM_RESOURCE_SPEC.getManagedMemorySize()));
 		assertThat(MemorySize.parse(configs.get(TaskManagerOptions.MANAGED_MEMORY_OFFHEAP_SIZE.key())), is(TM_RESOURCE_SPEC.getOffHeapManagedMemorySize()));
+		assertThat(Double.valueOf(configs.get(TaskManagerOptions.DEFAULT_SLOT_FRACTION.key())), is(TM_RESOURCE_SPEC.getDefaultSlotFraction()));
 	}
 
 	@Test
@@ -547,6 +550,60 @@ public class TaskExecutorResourceUtilsTest extends TestLogger {
 		conf.setString(TaskManagerOptions.JVM_OVERHEAD_MAX, jvmOverhead.getMebiBytes() + "m");
 
 		validateFail(conf);
+	}
+
+	@Test
+	public void testConfigDefaultSlotFraction() {
+		final double defaultSlotFraction = 0.5;
+
+		Configuration conf = new Configuration();
+		conf.setFloat(TaskManagerOptions.DEFAULT_SLOT_FRACTION, (float) defaultSlotFraction);
+
+		validateInAllConfigurations(conf, taskExecutorResourceSpec -> {
+			assertThat(taskExecutorResourceSpec.getDefaultSlotFraction(), is(defaultSlotFraction));
+
+			final ResourceProfile defaultSlotResourceProfile = taskExecutorResourceSpec.getDefaultSlotResourceProfile();
+			assertThat(defaultSlotResourceProfile.getCpuCores(),
+				is(taskExecutorResourceSpec.getCpuCores().isPresent() ? taskExecutorResourceSpec.getCpuCores().get() * defaultSlotFraction : Double.MAX_VALUE));
+			assertThat(defaultSlotResourceProfile.getTaskHeapMemory(), is(taskExecutorResourceSpec.getTaskHeapSize().multiply(defaultSlotFraction)));
+			assertThat(defaultSlotResourceProfile.getTaskOffHeapMemory(), is(taskExecutorResourceSpec.getTaskOffHeapSize().multiply(defaultSlotFraction)));
+			assertThat(defaultSlotResourceProfile.getOnHeapManagedMemory(), is(taskExecutorResourceSpec.getOnHeapManagedMemorySize().multiply(defaultSlotFraction)));
+			assertThat(defaultSlotResourceProfile.getOffHeapManagedMemory(), is(taskExecutorResourceSpec.getOffHeapManagedMemorySize().multiply(defaultSlotFraction)));
+			assertThat(defaultSlotResourceProfile.getShuffleMemory(), is(taskExecutorResourceSpec.getShuffleMemSize().multiply(defaultSlotFraction)));
+		});
+	}
+
+	@Test
+	@SuppressWarnings("deprecation")
+	public void testConfigDefaultSlotFractionLegacyNumSlots() {
+		final int numSlots = 2;
+		final double fraction = 1.0 / numSlots;
+
+		Configuration conf = new Configuration();
+		conf.setInteger(TaskManagerOptions.NUM_TASK_SLOTS, numSlots);
+
+		validateInAllConfigurations(conf, taskExecutorResourceSpec -> {
+			assertThat(taskExecutorResourceSpec.getDefaultSlotFraction(), is(fraction));
+
+			final ResourceProfile defaultSlotResourceProfile = taskExecutorResourceSpec.getDefaultSlotResourceProfile();
+			assertThat(defaultSlotResourceProfile.getCpuCores(),
+				is(taskExecutorResourceSpec.getCpuCores().isPresent() ? taskExecutorResourceSpec.getCpuCores().get() * fraction : Double.MAX_VALUE));
+			assertThat(defaultSlotResourceProfile.getTaskHeapMemory(), is(taskExecutorResourceSpec.getTaskHeapSize().multiply(fraction)));
+			assertThat(defaultSlotResourceProfile.getTaskOffHeapMemory(), is(taskExecutorResourceSpec.getTaskOffHeapSize().multiply(fraction)));
+			assertThat(defaultSlotResourceProfile.getOnHeapManagedMemory(), is(taskExecutorResourceSpec.getOnHeapManagedMemorySize().multiply(fraction)));
+			assertThat(defaultSlotResourceProfile.getOffHeapManagedMemory(), is(taskExecutorResourceSpec.getOffHeapManagedMemorySize().multiply(fraction)));
+			assertThat(defaultSlotResourceProfile.getShuffleMemory(), is(taskExecutorResourceSpec.getShuffleMemSize().multiply(fraction)));
+		});
+	}
+
+	@Test
+	public void testConfigDefaultSlotFractionFailure() {
+		final double defaultSlotFraction = 1.5;
+
+		Configuration conf = new Configuration();
+		conf.setFloat(TaskManagerOptions.DEFAULT_SLOT_FRACTION, (float) defaultSlotFraction);
+
+		validateFailInAllConfigurations(conf);
 	}
 
 	private void validateInAllConfigurations(final Configuration customConfig, Consumer<TaskExecutorResourceSpec> validateFunc) {
