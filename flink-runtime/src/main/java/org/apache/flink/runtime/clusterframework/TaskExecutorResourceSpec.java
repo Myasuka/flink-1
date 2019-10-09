@@ -20,6 +20,8 @@ package org.apache.flink.runtime.clusterframework;
 
 import org.apache.flink.configuration.MemorySize;
 
+import java.util.Optional;
+
 /**
  * Describe the specifics of different resource dimensions of the TaskExecutor.
  *
@@ -76,6 +78,8 @@ import org.apache.flink.configuration.MemorySize;
  */
 public class TaskExecutorResourceSpec implements java.io.Serializable {
 
+	private final double cpuCores;
+
 	private final MemorySize frameworkHeapSize;
 
 	private final MemorySize frameworkOffHeapMemorySize;
@@ -95,6 +99,7 @@ public class TaskExecutorResourceSpec implements java.io.Serializable {
 	private final MemorySize jvmOverheadSize;
 
 	public TaskExecutorResourceSpec(
+		double cpuCores,
 		MemorySize frameworkHeapSize,
 		MemorySize frameworkOffHeapSize,
 		MemorySize taskHeapSize,
@@ -105,6 +110,7 @@ public class TaskExecutorResourceSpec implements java.io.Serializable {
 		MemorySize jvmMetaspaceSize,
 		MemorySize jvmOverheadSize) {
 
+		this.cpuCores = cpuCores;
 		this.frameworkHeapSize = frameworkHeapSize;
 		this.frameworkOffHeapMemorySize = frameworkOffHeapSize;
 		this.taskHeapSize = taskHeapSize;
@@ -114,6 +120,14 @@ public class TaskExecutorResourceSpec implements java.io.Serializable {
 		this.offHeapManagedMemorySize = offHeapManagedMemorySize;
 		this.jvmMetaspaceSize = jvmMetaspaceSize;
 		this.jvmOverheadSize = jvmOverheadSize;
+	}
+
+	public Optional<Double> getCpuCores() {
+		if (cpuCores >= 0) {
+			return Optional.of(cpuCores);
+		} else {
+			return Optional.empty();
+		}
 	}
 
 	public MemorySize getFrameworkHeapSize() {
@@ -175,7 +189,8 @@ public class TaskExecutorResourceSpec implements java.io.Serializable {
 	@Override
 	public String toString() {
 		return "TaskExecutorResourceSpec {"
-			+ "frameworkHeapSize=" + frameworkHeapSize.toString()
+			+ "cpuCores=" + (cpuCores >= 0 ? cpuCores : "unknown")
+			+ ", frameworkHeapSize=" + frameworkHeapSize.toString()
 			+ ", frameworkOffHeapSize=" + frameworkOffHeapMemorySize.toString()
 			+ ", taskHeapSize=" + taskHeapSize.toString()
 			+ ", taskOffHeapSize=" + taskOffHeapSize.toString()
