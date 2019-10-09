@@ -1003,7 +1003,8 @@ public class TaskExecutor extends RpcEndpoint implements TaskExecutorGateway {
 				resourceManagerAddress.getAddress(),
 				resourceManagerAddress.getResourceManagerId(),
 				getMainThreadExecutor(),
-				new ResourceManagerRegistrationListener());
+				new ResourceManagerRegistrationListener(),
+				taskManagerConfiguration.getDefaultSlotResourceProfile());
 		resourceManagerConnection.start();
 	}
 
