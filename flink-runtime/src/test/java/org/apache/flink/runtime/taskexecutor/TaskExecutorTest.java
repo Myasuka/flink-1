@@ -68,8 +68,6 @@ import org.apache.flink.runtime.jobmaster.utils.TestingJobMasterGatewayBuilder;
 import org.apache.flink.runtime.leaderretrieval.LeaderRetrievalListener;
 import org.apache.flink.runtime.leaderretrieval.LeaderRetrievalService;
 import org.apache.flink.runtime.leaderretrieval.SettableLeaderRetrievalService;
-import org.apache.flink.runtime.memory.MemoryManager;
-import org.apache.flink.runtime.memory.MemoryManagerBuilder;
 import org.apache.flink.runtime.messages.Acknowledge;
 import org.apache.flink.runtime.metrics.groups.UnregisteredMetricGroups;
 import org.apache.flink.runtime.query.KvStateRegistry;
@@ -267,12 +265,6 @@ public class TaskExecutorTest extends TestLogger {
 			ioManager.getSpillingDirectories(),
 			Executors.directExecutor());
 
-		final MemoryManager memoryManager = MemoryManagerBuilder
-			.newBuilder()
-			.setMemorySize(4096)
-			.setPageSize(4096)
-			.build();
-
 		nettyShuffleEnvironment.start();
 
 		final KvStateService kvStateService = new KvStateService(new KvStateRegistry(), null, null);
@@ -280,7 +272,6 @@ public class TaskExecutorTest extends TestLogger {
 
 		final TaskManagerServices taskManagerServices = new TaskManagerServicesBuilder()
 			.setTaskManagerLocation(taskManagerLocation)
-			.setMemoryManager(memoryManager)
 			.setIoManager(ioManager)
 			.setShuffleEnvironment(nettyShuffleEnvironment)
 			.setKvStateService(kvStateService)
@@ -297,7 +288,7 @@ public class TaskExecutorTest extends TestLogger {
 			RpcUtils.terminateRpcEndpoint(taskManager, timeout);
 		}
 
-		assertThat(memoryManager.isShutdown(), is(true));
+		assertThat(taskSlotTable.isStopped(), is(true));
 		assertThat(nettyShuffleEnvironment.isClosed(), is(true));
 		assertThat(kvStateService.isShutdown(), is(true));
 	}
