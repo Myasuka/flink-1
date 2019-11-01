@@ -30,10 +30,17 @@ fi
 
 if [[ "$python" = "" ]]; then
     python="python"
+else
+  if [[ "$_PYTHON_WORKING_DIR" != "" && "$python" == ${_PYTHON_WORKING_DIR}* ]]; then
+    # The file extracted from archives may not preserve its original permission.
+    # Append minimum execution permission to prevent from permission denied error.
+    chmod +x "$python"
+  fi
 fi
 
-CURRENT_DIR=`pwd -P`
-FLINK_SOURCE_ROOT_DIR=`cd $bin/../../../../../; pwd -P`
+CURRENT_DIR=`pwd`
+bin_actual=`cd "$bin"; pwd -P`
+FLINK_SOURCE_ROOT_DIR=`cd ${bin_actual}/../../../../../; pwd`
 cd $CURRENT_DIR
 
 # Add pyflink to PYTHONPATH
@@ -50,6 +57,10 @@ else
   # directory of flink-python/pyflink to PYTHONPATH makes sure the Python source code will
   # take effect immediately after changed.
   export PYTHONPATH="$FLINK_PYTHON:$PYTHONPATH"
+fi
+
+if [[ "$_PYTHON_WORKING_DIR" != "" ]]; then
+    cd "$_PYTHON_WORKING_DIR"
 fi
 
 # Add py4j to PYTHONPATH
