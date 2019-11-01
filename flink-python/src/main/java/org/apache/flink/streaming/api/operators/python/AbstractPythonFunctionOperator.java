@@ -19,6 +19,9 @@
 package org.apache.flink.streaming.api.operators.python;
 
 import org.apache.flink.annotation.Internal;
+import org.apache.flink.python.ProcessEnvironmentManager;
+import org.apache.flink.python.PythonDependencyManager;
+import org.apache.flink.python.PythonEnvironmentManager;
 import org.apache.flink.python.PythonFunctionRunner;
 import org.apache.flink.python.PythonOptions;
 import org.apache.flink.streaming.api.operators.AbstractStreamOperator;
@@ -26,8 +29,10 @@ import org.apache.flink.streaming.api.operators.BoundedOneInput;
 import org.apache.flink.streaming.api.operators.OneInputStreamOperator;
 import org.apache.flink.streaming.api.watermark.Watermark;
 import org.apache.flink.streaming.runtime.streamrecord.StreamRecord;
+import org.apache.flink.table.functions.python.PythonEnv;
 
 import java.util.Map;
+import java.util.Random;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -110,7 +115,12 @@ public abstract class AbstractPythonFunctionOperator<IN, OUT>
 				LOG.info("The maximum bundle time is configured to {} milliseconds.", this.maxBundleTimeMills);
 			}
 
-			this.pythonFunctionRunner = createPythonFunctionRunner();
+			PythonDependencyManager dependencyManager = PythonDependencyManager.create(
+				getExecutionConfig().getGlobalJobParameters().toMap(),
+				getRuntimeContext().getDistributedCache());
+
+			this.pythonFunctionRunner = createPythonFunctionRunner(
+				createPythonEnvironmentManager(dependencyManager, getPythonTmpDirectoryRoot()));
 			this.pythonFunctionRunner.open();
 
 			this.elementCount = 0;
@@ -225,7 +235,25 @@ public abstract class AbstractPythonFunctionOperator<IN, OUT>
 	/**
 	 * Creates the {@link PythonFunctionRunner} which is responsible for Python user-defined function execution.
 	 */
-	public abstract PythonFunctionRunner<IN> createPythonFunctionRunner();
+	public abstract PythonFunctionRunner<IN> createPythonFunctionRunner(
+		PythonEnvironmentManager pythonEnvironmentManager);
+
+	/**
+	 * Returns the {@link PythonEnv} used to determine which PythonEnvironmentManager will be created.
+	 */
+	public abstract PythonEnv getPythonEnv();
+
+	private PythonEnvironmentManager createPythonEnvironmentManager(
+			PythonDependencyManager dependencyManager,
+			String tmpDirectoryRoot) {
+		PythonEnv pythonEnv = getPythonEnv();
+		if (pythonEnv.getExecType() == PythonEnv.ExecType.PROCESS) {
+			return ProcessEnvironmentManager.create(dependencyManager, tmpDirectoryRoot, System.getenv());
+		} else {
+			throw new UnsupportedOperationException(String.format(
+				"Execution type '%s' is not supported.", pythonEnv.getExecType()));
+		}
+	}
 
 	/**
 	 * Sends the execution results to the downstream operator.
@@ -274,5 +302,13 @@ public abstract class AbstractPythonFunctionOperator<IN, OUT>
 				bundleFinishedCallback = null;
 			}
 		}
+	}
+
+	private String getPythonTmpDirectoryRoot() {
+		String[] tmpDirectories =
+			getContainingTask().getEnvironment().getTaskManagerInfo().getTmpDirectories();
+		Random rand = new Random();
+		int tmpDirectoryIndex = rand.nextInt() % tmpDirectories.length;
+		return tmpDirectories[tmpDirectoryIndex];
 	}
 }

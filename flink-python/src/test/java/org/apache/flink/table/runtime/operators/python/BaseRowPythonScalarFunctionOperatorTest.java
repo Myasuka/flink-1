@@ -20,6 +20,7 @@ package org.apache.flink.table.runtime.operators.python;
 
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.common.typeinfo.Types;
+import org.apache.flink.python.PythonEnvironmentManager;
 import org.apache.flink.python.PythonFunctionRunner;
 import org.apache.flink.table.dataformat.BaseRow;
 import org.apache.flink.table.dataformat.util.BaseRowUtil;
@@ -89,7 +90,8 @@ public class BaseRowPythonScalarFunctionOperatorTest
 
 		@Override
 		public PythonFunctionRunner<BaseRow> createPythonFunctionRunner(
-			FnDataReceiver<BaseRow> resultReceiver) {
+				FnDataReceiver<BaseRow> resultReceiver,
+				PythonEnvironmentManager pythonEnvironmentManager) {
 			return new PassThroughPythonFunctionRunner<BaseRow>(resultReceiver) {
 				@Override
 				public BaseRow copy(BaseRow element) {

@@ -22,6 +22,9 @@ import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.api.java.typeutils.runtime.RowSerializer;
 import org.apache.flink.core.memory.DataOutputViewStreamWrapper;
 import org.apache.flink.fnexecution.v1.FlinkFnApi;
+import org.apache.flink.python.ProcessEnvironmentManager;
+import org.apache.flink.python.PythonDependencyManager;
+import org.apache.flink.python.PythonEnvironmentManager;
 import org.apache.flink.table.runtime.runners.python.AbstractPythonScalarFunctionRunner;
 import org.apache.flink.table.runtime.runners.python.PythonScalarFunctionRunner;
 import org.apache.flink.table.types.logical.BigIntType;
@@ -223,16 +226,19 @@ public class PythonScalarFunctionRunnerTest extends AbstractPythonScalarFunction
 			// ignore the execution results
 		};
 
-		final PythonEnv pythonEnv = new PythonEnv(PythonEnv.ExecType.PROCESS);
+		final PythonEnvironmentManager environmentManager =
+			ProcessEnvironmentManager.create(
+				new PythonDependencyManager(new HashMap<>(), null, null, null, new HashMap<>()),
+				System.getProperty("java.io.tmpdir"),
+				new HashMap<>());
 
 		return new PythonScalarFunctionRunner(
 			"testPythonRunner",
 			dummyReceiver,
 			pythonFunctionInfos,
-			pythonEnv,
+			environmentManager,
 			inputType,
-			outputType,
-			new String[] {System.getProperty("java.io.tmpdir")});
+			outputType);
 	}
 
 	private AbstractPythonScalarFunctionRunner<Row, Row> createUDFRunner(
@@ -245,17 +251,20 @@ public class PythonScalarFunctionRunnerTest extends AbstractPythonScalarFunction
 
 		RowType rowType = new RowType(Collections.singletonList(new RowType.RowField("f1", new BigIntType())));
 
-		final PythonEnv pythonEnv = new PythonEnv(PythonEnv.ExecType.PROCESS);
+		final PythonEnvironmentManager environmentManager =
+			ProcessEnvironmentManager.create(
+				new PythonDependencyManager(new HashMap<>(), null, null, null, new HashMap<>()),
+				System.getProperty("java.io.tmpdir"),
+				new HashMap<>());
 
 		return new PythonScalarFunctionRunnerTestHarness(
 			"testPythonRunner",
 			receiver,
 			pythonFunctionInfos,
-			pythonEnv,
+			environmentManager,
 			rowType,
 			rowType,
-			jobBundleFactory,
-			new String[] {System.getProperty("java.io.tmpdir")});
+			jobBundleFactory);
 	}
 
 	private static class PythonScalarFunctionRunnerTestHarness extends PythonScalarFunctionRunner {
@@ -266,11 +275,10 @@ public class PythonScalarFunctionRunnerTest extends AbstractPythonScalarFunction
 			String taskName,
 			FnDataReceiver<Row> resultReceiver,
 			PythonFunctionInfo[] scalarFunctions,
-			PythonEnv pythonEnv,
+			PythonEnvironmentManager environmentManager,
 			RowType inputType, RowType outputType,
-			JobBundleFactory jobBundleFactory,
-			String[] tempDirs) {
-			super(taskName, resultReceiver, scalarFunctions, pythonEnv, inputType, outputType, tempDirs);
+			JobBundleFactory jobBundleFactory) {
+			super(taskName, resultReceiver, scalarFunctions, environmentManager, inputType, outputType);
 			this.jobBundleFactory = jobBundleFactory;
 		}
 

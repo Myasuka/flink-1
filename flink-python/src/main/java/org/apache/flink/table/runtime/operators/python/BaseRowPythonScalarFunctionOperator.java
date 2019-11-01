@@ -19,6 +19,7 @@
 package org.apache.flink.table.runtime.operators.python;
 
 import org.apache.flink.annotation.Internal;
+import org.apache.flink.python.PythonEnvironmentManager;
 import org.apache.flink.python.PythonFunctionRunner;
 import org.apache.flink.streaming.runtime.streamrecord.StreamRecord;
 import org.apache.flink.table.api.TableConfig;
@@ -113,15 +114,16 @@ public class BaseRowPythonScalarFunctionOperator
 	}
 
 	@Override
-	public PythonFunctionRunner<BaseRow> createPythonFunctionRunner(FnDataReceiver<BaseRow> resultReceiver) {
+	public PythonFunctionRunner<BaseRow> createPythonFunctionRunner(
+			FnDataReceiver<BaseRow> resultReceiver,
+			PythonEnvironmentManager pythonEnvironmentManager) {
 		return new BaseRowPythonScalarFunctionRunner(
 			getRuntimeContext().getTaskName(),
 			resultReceiver,
 			scalarFunctions,
-			scalarFunctions[0].getPythonFunction().getPythonEnv(),
+			pythonEnvironmentManager,
 			udfInputType,
-			udfOutputType,
-			getContainingTask().getEnvironment().getTaskManagerInfo().getTmpDirectories());
+			udfOutputType);
 	}
 
 	private Projection<BaseRow, BinaryRow> createUdfInputProjection() {

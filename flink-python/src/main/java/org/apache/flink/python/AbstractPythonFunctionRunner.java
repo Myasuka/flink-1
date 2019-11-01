@@ -21,17 +21,13 @@ package org.apache.flink.python;
 import org.apache.flink.annotation.Internal;
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
-import org.apache.flink.configuration.ConfigConstants;
 import org.apache.flink.core.memory.ByteArrayInputStreamWithPos;
 import org.apache.flink.core.memory.ByteArrayOutputStreamWithPos;
 import org.apache.flink.core.memory.DataInputViewStreamWrapper;
 import org.apache.flink.core.memory.DataOutputViewStreamWrapper;
-import org.apache.flink.table.functions.python.PythonEnv;
 import org.apache.flink.util.Preconditions;
-import org.apache.flink.util.StringUtils;
 
 import org.apache.beam.model.pipeline.v1.RunnerApi;
-import org.apache.beam.runners.core.construction.Environments;
 import org.apache.beam.runners.core.construction.PipelineOptionsTranslation;
 import org.apache.beam.runners.core.construction.graph.ExecutableStage;
 import org.apache.beam.runners.fnexecution.control.BundleProgressHandler;
@@ -48,12 +44,8 @@ import org.apache.beam.sdk.options.PortablePipelineOptions;
 import org.apache.beam.sdk.util.WindowedValue;
 import org.apache.beam.vendor.grpc.v1p21p0.com.google.protobuf.Struct;
 
-import java.io.DataOutputStream;
 import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
-import java.util.Arrays;
-import java.util.Random;
 
 /**
  * An base class for {@link PythonFunctionRunner}.
@@ -74,9 +66,9 @@ public abstract class AbstractPythonFunctionRunner<IN, OUT> implements PythonFun
 	private final FnDataReceiver<OUT> resultReceiver;
 
 	/**
-	 * The Python execution environment.
+	 * The Python execution environment factory.
 	 */
-	private final PythonEnv pythonEnv;
+	private PythonEnvironmentManager environmentManager;
 
 	/**
 	 * The bundle factory which has all job-scoped information and can be used to create a {@link StageBundleFactory}.
@@ -92,11 +84,6 @@ public abstract class AbstractPythonFunctionRunner<IN, OUT> implements PythonFun
 	 * Handler for state requests.
 	 */
 	private final StateRequestHandler stateRequestHandler;
-
-	/**
-	 * Temporary directories to store the retrieval token.
-	 */
-	private final String[] tempDirs;
 
 	/**
 	 * The file of the retrieval token representing the entirety of the staged artifacts.
@@ -156,14 +143,12 @@ public abstract class AbstractPythonFunctionRunner<IN, OUT> implements PythonFun
 	public AbstractPythonFunctionRunner(
 		String taskName,
 		FnDataReceiver<OUT> resultReceiver,
-		PythonEnv pythonEnv,
-		StateRequestHandler stateRequestHandler,
-		String[] tempDirs) {
+		PythonEnvironmentManager environmentManager,
+		StateRequestHandler stateRequestHandler) {
 		this.taskName = Preconditions.checkNotNull(taskName);
 		this.resultReceiver = Preconditions.checkNotNull(resultReceiver);
-		this.pythonEnv = Preconditions.checkNotNull(pythonEnv);
+		this.environmentManager = Preconditions.checkNotNull(environmentManager);
 		this.stateRequestHandler = Preconditions.checkNotNull(stateRequestHandler);
-		this.tempDirs = Preconditions.checkNotNull(tempDirs);
 	}
 
 	@Override
@@ -184,6 +169,7 @@ public abstract class AbstractPythonFunctionRunner<IN, OUT> implements PythonFun
 		jobBundleFactory = createJobBundleFactory(pipelineOptions);
 		stageBundleFactory = jobBundleFactory.forStage(createExecutableStage());
 		progressHandler = BundleProgressHandler.ignored();
+		environmentManager.open();
 	}
 
 	@Override
@@ -202,6 +188,14 @@ public abstract class AbstractPythonFunctionRunner<IN, OUT> implements PythonFun
 			}
 		} finally {
 			jobBundleFactory = null;
+		}
+
+		try {
+			if (environmentManager != null) {
+				environmentManager.close();
+			}
+		} finally {
+			environmentManager = null;
 		}
 	}
 
@@ -259,32 +253,11 @@ public abstract class AbstractPythonFunctionRunner<IN, OUT> implements PythonFun
 	@VisibleForTesting
 	public JobBundleFactory createJobBundleFactory(Struct pipelineOptions) throws Exception {
 		return DefaultJobBundleFactory.create(
-			JobInfo.create(taskName, taskName, createEmptyRetrievalToken(), pipelineOptions));
+			JobInfo.create(taskName, taskName, createRetrievalToken(), pipelineOptions));
 	}
 
-	private String createEmptyRetrievalToken() throws Exception {
-		// try to find a unique file name for the retrieval token
-		final Random rnd = new Random();
-		for (int attempt = 0; attempt < 10; attempt++) {
-			String directory = tempDirs[rnd.nextInt(tempDirs.length)];
-			retrievalToken = new File(directory, randomString(rnd) + ".json");
-			if (retrievalToken.createNewFile()) {
-				final DataOutputStream dos = new DataOutputStream(new FileOutputStream(retrievalToken));
-				dos.writeBytes("{\"manifest\": {}}");
-				dos.flush();
-				dos.close();
-				return retrievalToken.getAbsolutePath();
-			}
-		}
-
-		throw new IOException(
-			"Could not find a unique file name in '" + Arrays.toString(tempDirs) + "' for retrieval token.");
-	}
-
-	private static String randomString(Random random) {
-		final byte[] bytes = new byte[20];
-		random.nextBytes(bytes);
-		return StringUtils.byteToHexString(bytes);
+	private String createRetrievalToken() throws IOException {
+		return environmentManager.createRetrievalToken();
 	}
 
 	/**
@@ -292,20 +265,7 @@ public abstract class AbstractPythonFunctionRunner<IN, OUT> implements PythonFun
 	 * It's used by Beam's portability framework to creates the actual Python execution environment.
 	 */
 	protected RunnerApi.Environment createPythonExecutionEnvironment() {
-		if (pythonEnv.getExecType() == PythonEnv.ExecType.PROCESS) {
-			String flinkHomePath = System.getenv(ConfigConstants.ENV_FLINK_HOME_DIR);
-			String pythonWorkerCommand =
-				flinkHomePath + File.separator + "bin" + File.separator + "pyflink-udf-runner.sh";
-
-			return Environments.createProcessEnvironment(
-				"",
-				"",
-				pythonWorkerCommand,
-				null);
-		} else {
-			throw new UnsupportedOperationException(String.format(
-				"Execution type '%s' is not supported.", pythonEnv.getExecType()));
-		}
+		return environmentManager.createEnvironment();
 	}
 
 	/**

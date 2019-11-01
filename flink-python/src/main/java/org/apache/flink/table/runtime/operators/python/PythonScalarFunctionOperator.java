@@ -22,6 +22,7 @@ import org.apache.flink.annotation.Internal;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.api.java.typeutils.RowTypeInfo;
+import org.apache.flink.python.PythonEnvironmentManager;
 import org.apache.flink.python.PythonFunctionRunner;
 import org.apache.flink.streaming.runtime.streamrecord.StreamRecord;
 import org.apache.flink.table.functions.ScalarFunction;
@@ -106,15 +107,16 @@ public class PythonScalarFunctionOperator extends AbstractPythonScalarFunctionOp
 	}
 
 	@Override
-	public PythonFunctionRunner<Row> createPythonFunctionRunner(FnDataReceiver<Row> resultReceiver) {
+	public PythonFunctionRunner<Row> createPythonFunctionRunner(
+			FnDataReceiver<Row> resultReceiver,
+			PythonEnvironmentManager pythonEnvironmentManager) {
 		return new PythonScalarFunctionRunner(
 			getRuntimeContext().getTaskName(),
 			resultReceiver,
 			scalarFunctions,
-			scalarFunctions[0].getPythonFunction().getPythonEnv(),
+			pythonEnvironmentManager,
 			udfInputType,
-			udfOutputType,
-			getContainingTask().getEnvironment().getTaskManagerInfo().getTmpDirectories());
+			udfOutputType);
 	}
 
 	/**

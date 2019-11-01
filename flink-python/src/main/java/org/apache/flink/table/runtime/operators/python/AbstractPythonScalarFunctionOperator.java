@@ -19,10 +19,12 @@
 package org.apache.flink.table.runtime.operators.python;
 
 import org.apache.flink.annotation.Internal;
+import org.apache.flink.python.PythonEnvironmentManager;
 import org.apache.flink.python.PythonFunctionRunner;
 import org.apache.flink.streaming.api.operators.python.AbstractPythonFunctionOperator;
 import org.apache.flink.streaming.runtime.streamrecord.StreamRecord;
 import org.apache.flink.table.functions.ScalarFunction;
+import org.apache.flink.table.functions.python.PythonEnv;
 import org.apache.flink.table.functions.python.PythonFunctionInfo;
 import org.apache.flink.table.types.logical.RowType;
 import org.apache.flink.util.Preconditions;
@@ -145,13 +147,20 @@ public abstract class AbstractPythonScalarFunctionOperator<IN, OUT, UDFIN, UDFOU
 	}
 
 	@Override
-	public PythonFunctionRunner<IN> createPythonFunctionRunner() {
+	public PythonEnv getPythonEnv() {
+		return scalarFunctions[0].getPythonFunction().getPythonEnv();
+	}
+
+	@Override
+	public PythonFunctionRunner<IN> createPythonFunctionRunner(
+			PythonEnvironmentManager pythonEnvironmentManager) {
 		final FnDataReceiver<UDFOUT> udfResultReceiver = input -> {
 			// handover to queue, do not block the result receiver thread
 			udfResultQueue.put(input);
 		};
 
-		return new ProjectUdfInputPythonScalarFunctionRunner(createPythonFunctionRunner(udfResultReceiver));
+		return new ProjectUdfInputPythonScalarFunctionRunner(
+			createPythonFunctionRunner(udfResultReceiver, pythonEnvironmentManager));
 	}
 
 	/**
@@ -162,7 +171,9 @@ public abstract class AbstractPythonScalarFunctionOperator<IN, OUT, UDFIN, UDFOU
 
 	public abstract UDFIN getUdfInput(IN element);
 
-	public abstract PythonFunctionRunner<UDFIN> createPythonFunctionRunner(FnDataReceiver<UDFOUT> resultReceiver);
+	public abstract PythonFunctionRunner<UDFIN> createPythonFunctionRunner(
+			FnDataReceiver<UDFOUT> resultReceiver,
+			PythonEnvironmentManager pythonEnvironmentManager);
 
 	private class ProjectUdfInputPythonScalarFunctionRunner implements PythonFunctionRunner<IN> {
 

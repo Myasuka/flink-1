@@ -19,6 +19,9 @@
 package org.apache.flink.table.functions.python;
 
 import org.apache.flink.api.common.typeutils.TypeSerializer;
+import org.apache.flink.python.ProcessEnvironmentManager;
+import org.apache.flink.python.PythonDependencyManager;
+import org.apache.flink.python.PythonEnvironmentManager;
 import org.apache.flink.table.dataformat.BaseRow;
 import org.apache.flink.table.runtime.runners.python.AbstractPythonScalarFunctionRunner;
 import org.apache.flink.table.runtime.runners.python.BaseRowPythonScalarFunctionRunner;
@@ -27,6 +30,8 @@ import org.apache.flink.table.types.logical.RowType;
 
 import org.apache.beam.sdk.fn.data.FnDataReceiver;
 import org.junit.Test;
+
+import java.util.HashMap;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
@@ -94,15 +99,18 @@ public class BaseRowPythonScalarFunctionRunnerTest extends AbstractPythonScalarF
 			// ignore the execution results
 		};
 
-		final PythonEnv pythonEnv = new PythonEnv(PythonEnv.ExecType.PROCESS);
+		final PythonEnvironmentManager environmentManager =
+			ProcessEnvironmentManager.create(
+				new PythonDependencyManager(new HashMap<>(), null, null, null, new HashMap<>()),
+				System.getProperty("java.io.tmpdir"),
+				new HashMap<>());
 
 		return new BaseRowPythonScalarFunctionRunner(
 			"testPythonRunner",
 			dummyReceiver,
 			pythonFunctionInfos,
-			pythonEnv,
+			environmentManager,
 			inputType,
-			outputType,
-			new String[] {System.getProperty("java.io.tmpdir")});
+			outputType);
 	}
 }
