@@ -19,6 +19,7 @@
 from py4j.compat import long
 
 from pyflink.common import Configuration, SqlDialect
+from pyflink.common.dependency_manager import DependencyManager
 from pyflink.java_gateway import get_gateway
 
 __all__ = ['TableConfig']
@@ -273,6 +274,64 @@ class TableConfig(object):
         :type sql_dialect: SqlDialect
         """
         self._j_table_config.setSqlDialect(SqlDialect._to_j_sql_dialect(sql_dialect))
+
+    def set_python_executable(self, python_exec):
+        """
+        Set the path of the python interpreter for running the python udf on workers.
+
+        e.g. "/usr/local/bin/python3".
+
+        If python UDFs need to run in a specific python environment and the environment is not
+        exist on cluster, this method :func:`pyflink.table.TableEnvironment.add_python_archive`
+        can be used to upload the packaged environment.
+        Then the python interpreter path of the uploaded environment can be specified
+        via this method.
+
+        Example:
+        ::
+
+            # command executed in shell
+            # assert the relative path of python interpreter is py_env/bin/python
+            $ zip -r py_env.zip py_env
+
+            # python code
+            >>> table_env.add_python_archive("py_env.zip", "myenv")
+            >>> table_env.get_config().set_python_executable("myenv/py_env/bin/python")
+
+            # the files in archive is also accessible in UDF
+            >>> def my_udf():
+            ...     with open("myenv/py_env/data/data.txt") as f:
+            ...         ...
+
+        .. note::
+
+            Please make sure the uploaded python environment matches the platform that the cluster
+            running on and that the version is 3.5 or higher.
+
+        .. note::
+
+            Currently only .zip file format is supported.
+
+        .. note::
+
+            The python udf worker depends on Apache Beam (version must be 2.15.0),
+            Pip (version >= 7.1.0) and SetupTools (version >= 37.0.0).
+            Please ensure that the specified environment meets above requirements.
+
+        :param python_exec: The path of python interpreter.
+        :type python_exec: str
+        """
+        self.get_configuration().set_string(DependencyManager.PYTHON_EXEC, python_exec)
+
+    def get_python_executable(self):
+        """
+        Get the path of the python interpreter for running the python udf on workers.
+        If no path is specified before, it will return a None value.
+
+        :return: The path of the python interpreter for running the python udf on workers.
+        :rtype: str
+        """
+        return self.get_configuration().get_string(DependencyManager.PYTHON_EXEC, None)
 
     @staticmethod
     def get_default():
