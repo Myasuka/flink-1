@@ -20,7 +20,9 @@ package org.apache.flink.runtime.clusterframework.types;
 
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.operators.ResourceSpec;
+import org.apache.flink.api.common.resources.AdditiveResourceValue;
 import org.apache.flink.api.common.resources.Resource;
+import org.apache.flink.api.common.resources.ResourceValue;
 import org.apache.flink.configuration.MemorySize;
 
 import javax.annotation.Nonnull;
@@ -33,6 +35,7 @@ import java.util.Map;
 import java.util.Objects;
 
 import static org.apache.flink.util.Preconditions.checkArgument;
+import static org.apache.flink.util.Preconditions.checkNotNull;
 
 /**
  * Describe the immutable resource profile of the slot, either when requiring or offering it. The profile can be
@@ -64,15 +67,16 @@ public class ResourceProfile implements Serializable {
 	 * A ResourceProfile that indicates infinite resource that matches any resource requirement, for testability purpose only.
 	 */
 	@VisibleForTesting
-	public static final ResourceProfile ANY = new ResourceProfile(Double.MAX_VALUE, MemorySize.MAX_VALUE, MemorySize.MAX_VALUE, MemorySize.MAX_VALUE, MemorySize.MAX_VALUE, MemorySize.MAX_VALUE, Collections.emptyMap());
+	public static final ResourceProfile ANY = new ResourceProfile(new AdditiveResourceValue(Double.MAX_VALUE), MemorySize.MAX_VALUE, MemorySize.MAX_VALUE, MemorySize.MAX_VALUE, MemorySize.MAX_VALUE, MemorySize.MAX_VALUE, Collections.emptyMap());
 
 	/** A ResourceProfile describing zero resources. */
-	public static final ResourceProfile ZERO = new ResourceProfile(0, MemorySize.ZERO);
+	public static final ResourceProfile ZERO = new ResourceProfile(0, 0);
 
 	// ------------------------------------------------------------------------
 
-	/** How many cpu cores are needed, use double so we can specify cpu like 0.1. */
-	private final double cpuCores;
+	/** How many cpu cores are needed. Can be null only if it is unknown. */
+	@Nullable
+	private final ResourceValue cpuCores;
 
 	/** How much task heap memory is needed. */
 	@Nullable // can be null only for UNKNOWN
@@ -111,19 +115,20 @@ public class ResourceProfile implements Serializable {
 	 * @param extendedResources The extended resources such as GPU and FPGA
 	 */
 	public ResourceProfile(
-			double cpuCores,
-			MemorySize taskHeapMemory,
-			MemorySize taskOffHeapMemory,
-			MemorySize onHeapManagedMemory,
-			MemorySize offHeapManagedMemory,
-			MemorySize shuffleMemory,
-			Map<String, Resource> extendedResources) {
-		this.cpuCores = cpuCores;
-		this.taskHeapMemory = taskHeapMemory;
-		this.taskOffHeapMemory = taskOffHeapMemory;
-		this.onHeapManagedMemory = onHeapManagedMemory;
-		this.offHeapManagedMemory = offHeapManagedMemory;
-		this.shuffleMemory = shuffleMemory;
+			final ResourceValue cpuCores,
+			final MemorySize taskHeapMemory,
+			final MemorySize taskOffHeapMemory,
+			final MemorySize onHeapManagedMemory,
+			final MemorySize offHeapManagedMemory,
+			final MemorySize shuffleMemory,
+			final Map<String, Resource> extendedResources) {
+
+		this.cpuCores = checkNotNull(cpuCores);
+		this.taskHeapMemory = checkNotNull(taskHeapMemory);
+		this.taskOffHeapMemory = checkNotNull(taskOffHeapMemory);
+		this.onHeapManagedMemory = checkNotNull(onHeapManagedMemory);
+		this.offHeapManagedMemory = checkNotNull(offHeapManagedMemory);
+		this.shuffleMemory = checkNotNull(shuffleMemory);
 		if (extendedResources != null) {
 			this.extendedResources.putAll(extendedResources);
 		}
@@ -131,16 +136,16 @@ public class ResourceProfile implements Serializable {
 
 	@VisibleForTesting
 	public ResourceProfile(
-		double cpuCores,
-		int taskHeapMemoryMB,
-		int taskOffHeapMemoryMB,
-		int onHeapManagedMemoryMB,
-		int offHeapManagedMemoryMB,
-		int shuffleMemoryMB,
-		Map<String, Resource> extendedResources) {
+			final double cpuCores,
+			final int taskHeapMemoryMB,
+			final int taskOffHeapMemoryMB,
+			final int onHeapManagedMemoryMB,
+			final int offHeapManagedMemoryMB,
+			final int shuffleMemoryMB,
+			final Map<String, Resource> extendedResources) {
 
 		this(
-			cpuCores,
+			new AdditiveResourceValue(cpuCores),
 			MemorySize.parse(taskHeapMemoryMB + "m"),
 			MemorySize.parse(taskOffHeapMemoryMB + "m"),
 			MemorySize.parse(onHeapManagedMemoryMB + "m"),
@@ -150,20 +155,22 @@ public class ResourceProfile implements Serializable {
 	}
 
 	@VisibleForTesting
-	public ResourceProfile(double cpuCores, MemorySize taskHeapMemory) {
-		this(cpuCores, taskHeapMemory, MemorySize.ZERO, MemorySize.ZERO, MemorySize.ZERO, MemorySize.ZERO, Collections.emptyMap());
-	}
-
-	@VisibleForTesting
 	public ResourceProfile(double cpuCores, int taskHeapMemoryMB) {
-		this(cpuCores, MemorySize.parse(taskHeapMemoryMB + "m"), MemorySize.ZERO, MemorySize.ZERO, MemorySize.ZERO, MemorySize.ZERO, Collections.emptyMap());
+		this(
+			new AdditiveResourceValue(cpuCores),
+			MemorySize.parse(taskHeapMemoryMB + "m"),
+			MemorySize.ZERO,
+			MemorySize.ZERO,
+			MemorySize.ZERO,
+			MemorySize.ZERO,
+			Collections.emptyMap());
 	}
 
 	/**
 	 * Creates a special ResourceProfile with negative values, indicating resources are unspecified.
 	 */
 	private ResourceProfile() {
-		this.cpuCores = -1.0;
+		this.cpuCores = null;
 		this.taskHeapMemory = null;
 		this.taskOffHeapMemory = null;
 		this.onHeapManagedMemory = null;
@@ -178,7 +185,7 @@ public class ResourceProfile implements Serializable {
 	 *
 	 * @return The cpu cores, 1.0 means a full cpu thread
 	 */
-	public double getCpuCores() {
+	public ResourceValue getCpuCores() {
 		throwUnsupportedOperationExecptionIfUnknown();
 		return cpuCores;
 	}
@@ -275,7 +282,8 @@ public class ResourceProfile implements Serializable {
 	 * @param required the required resource profile
 	 * @return true if the requirement is matched, otherwise false
 	 */
-	public boolean isMatching(ResourceProfile required) {
+	public boolean isMatching(final ResourceProfile required) {
+		checkNotNull(required, "Cannot check matching with null resources");
 
 		if (this.equals(ANY)) {
 			return true;
@@ -293,12 +301,13 @@ public class ResourceProfile implements Serializable {
 			return true;
 		}
 
-		if (cpuCores >= required.getCpuCores() &&
+		if (cpuCores.compareTo(required.getCpuCores()) >= 0 &&
 			taskHeapMemory.getBytes() >= required.taskHeapMemory.getBytes() &&
 			taskOffHeapMemory.getBytes() >= required.taskOffHeapMemory.getBytes() &&
 			onHeapManagedMemory.getBytes() >= required.onHeapManagedMemory.getBytes() &&
 			offHeapManagedMemory.getBytes() >= required.offHeapManagedMemory.getBytes() &&
 			shuffleMemory.getBytes() >= required.shuffleMemory.getBytes()) {
+
 			for (Map.Entry<String, Resource> resource : required.extendedResources.entrySet()) {
 				if (!extendedResources.containsKey(resource.getKey()) ||
 					extendedResources.get(resource.getKey()).getValue().compareTo(resource.getValue().getValue()) < 0) {
@@ -314,8 +323,7 @@ public class ResourceProfile implements Serializable {
 
 	@Override
 	public int hashCode() {
-		final long cpuBits =  Double.doubleToLongBits(cpuCores);
-		int result = (int) (cpuBits ^ (cpuBits >>> 32));
+		int result = Objects.hashCode(cpuCores);
 		result = 31 * result + Objects.hashCode(taskHeapMemory);
 		result = 31 * result + Objects.hashCode(taskOffHeapMemory);
 		result = 31 * result + Objects.hashCode(onHeapManagedMemory);
@@ -331,7 +339,7 @@ public class ResourceProfile implements Serializable {
 			return true;
 		} else if (obj != null && obj.getClass() == ResourceProfile.class) {
 			ResourceProfile that = (ResourceProfile) obj;
-			return this.cpuCores == that.cpuCores &&
+			return Objects.equals(this.cpuCores, that.cpuCores) &&
 				Objects.equals(taskHeapMemory, that.taskHeapMemory) &&
 				Objects.equals(taskOffHeapMemory, that.taskOffHeapMemory) &&
 				Objects.equals(onHeapManagedMemory, that.onHeapManagedMemory) &&
@@ -349,7 +357,9 @@ public class ResourceProfile implements Serializable {
 	 * @return The merged resource profile.
 	 */
 	@Nonnull
-	public ResourceProfile merge(@Nonnull ResourceProfile other) {
+	public ResourceProfile merge(final ResourceProfile other) {
+		checkNotNull(other, "Cannot merge with null resources");
+
 		if (equals(ANY) || other.equals(ANY)) {
 			return ANY;
 		}
@@ -366,7 +376,7 @@ public class ResourceProfile implements Serializable {
 		});
 
 		return new ResourceProfile(
-			addNonNegativeDoublesConsideringOverflow(cpuCores, other.cpuCores),
+			cpuCores.merge(other.getCpuCores()),
 			taskHeapMemory.add(other.taskHeapMemory),
 			taskOffHeapMemory.add(other.taskOffHeapMemory),
 			onHeapManagedMemory.add(other.onHeapManagedMemory),
@@ -381,7 +391,9 @@ public class ResourceProfile implements Serializable {
 	 * @param other The other resource profile to subtract.
 	 * @return The subtracted resource profile.
 	 */
-	public ResourceProfile subtract(ResourceProfile other) {
+	public ResourceProfile subtract(final ResourceProfile other) {
+		checkNotNull(other, "Cannot subtract with null resources");
+
 		if (equals(ANY) || other.equals(ANY)) {
 			return ANY;
 		}
@@ -402,7 +414,7 @@ public class ResourceProfile implements Serializable {
 		});
 
 		return new ResourceProfile(
-			subtractDoublesConsideringInf(cpuCores, other.cpuCores),
+			cpuCores.subtract(other.getCpuCores()),
 			taskHeapMemory.subtract(other.taskHeapMemory),
 			taskOffHeapMemory.subtract(other.taskOffHeapMemory),
 			onHeapManagedMemory.subtract(other.onHeapManagedMemory),
@@ -410,26 +422,6 @@ public class ResourceProfile implements Serializable {
 			shuffleMemory.subtract(other.shuffleMemory),
 			resultExtendedResource
 		);
-	}
-
-	private double addNonNegativeDoublesConsideringOverflow(double first, double second) {
-		double result = first + second;
-
-		if (Double.isInfinite(result)) {
-			throw new ArithmeticException("double overflow");
-		}
-
-		return result;
-	}
-
-	private double subtractDoublesConsideringInf(double first, double second) {
-		double result = first - second;
-
-		if (Double.isInfinite(result)) {
-			throw new ArithmeticException("double overflow");
-		}
-
-		return result;
 	}
 
 	@Override
@@ -491,7 +483,7 @@ public class ResourceProfile implements Serializable {
 		Map<String, Resource> copiedExtendedResources = new HashMap<>(resourceSpec.getExtendedResources());
 
 		return new ResourceProfile(
-			resourceSpec.getCpuCores().getValue(),
+			resourceSpec.getCpuCores(),
 			resourceSpec.getTaskHeapMemory(),
 			resourceSpec.getTaskOffHeapMemory(),
 			resourceSpec.getOnHeapManagedMemory(),
