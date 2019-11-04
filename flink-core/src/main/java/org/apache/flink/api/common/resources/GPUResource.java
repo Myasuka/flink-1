@@ -30,15 +30,15 @@ public class GPUResource extends Resource {
 	private static final long serialVersionUID = -2276080061777135142L;
 
 	public GPUResource(double value) {
-		this(value, ResourceAggregateType.AGGREGATE_TYPE_SUM);
+		this(new AdditiveResourceValue(value));
 	}
 
-	private GPUResource(double value, ResourceAggregateType type) {
-		super(ResourceSpec.GPU_NAME, value, type);
+	private GPUResource(final ResourceValue value) {
+		super(ResourceSpec.GPU_NAME, value);
 	}
 
 	@Override
-	public Resource create(double value, ResourceAggregateType type) {
-		return new GPUResource(value, type);
+	public Resource create(final ResourceValue value) {
+		return new GPUResource(value);
 	}
 }

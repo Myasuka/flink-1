@@ -21,6 +21,7 @@ package org.apache.flink.api.common.operators;
 import org.apache.flink.annotation.Internal;
 import org.apache.flink.api.common.resources.GPUResource;
 import org.apache.flink.api.common.resources.Resource;
+import org.apache.flink.api.common.resources.ResourceValue;
 import org.apache.flink.configuration.MemorySize;
 
 import javax.annotation.Nullable;
@@ -170,14 +171,15 @@ public final class ResourceSpec implements Serializable {
 		return offHeapManagedMemory;
 	}
 
-	public double getGPUResource() {
+	public ResourceValue getGPUResource() {
 		throwUnsupportedOperationExceptionIfUnknown();
-		Resource gpuResource = extendedResources.get(GPU_NAME);
+
+		final Resource gpuResource = extendedResources.get(GPU_NAME);
 		if (gpuResource != null) {
 			return gpuResource.getValue();
+		} else {
+			return null;
 		}
-
-		return 0.0;
 	}
 
 	public Map<String, Resource> getExtendedResources() {
@@ -215,8 +217,8 @@ public final class ResourceSpec implements Serializable {
 		if (cmp1 <= 0 && cmp2 <= 0 && cmp3 <= 0 && cmp4 <= 0 && cmp5 <= 0) {
 			for (Resource resource : extendedResources.values()) {
 				if (!other.extendedResources.containsKey(resource.getName()) ||
-					other.extendedResources.get(resource.getName()).getResourceAggregateType() != resource.getResourceAggregateType() ||
-						other.extendedResources.get(resource.getName()).getValue() < resource.getValue()) {
+					other.extendedResources.get(resource.getName()).getValue().compareTo(resource.getValue()) < 0) {
+
 					return false;
 				}
 			}
