@@ -19,6 +19,7 @@
 package org.apache.flink.table.dataformat.vector;
 
 import org.apache.flink.table.dataformat.ColumnarRow;
+import org.apache.flink.table.dataformat.Decimal;
 import org.apache.flink.table.dataformat.vector.heap.HeapBooleanVector;
 import org.apache.flink.table.dataformat.vector.heap.HeapByteVector;
 import org.apache.flink.table.dataformat.vector.heap.HeapBytesVector;
@@ -85,19 +86,47 @@ public class VectorizedColumnBatchTest {
 			col7.vector[i] = (short) i;
 		}
 
+		HeapLongVector col8 = new HeapLongVector(VECTOR_SIZE);
+		for (int i = 0; i < VECTOR_SIZE; i++) {
+			col8.vector[i] = i;
+		}
+
+		long[] vector9 = new long[VECTOR_SIZE];
+		DecimalColumnVector col9 = new DecimalColumnVector() {
+
+			@Override
+			public boolean isNullAt(int i) {
+				return false;
+			}
+
+			@Override
+			public void reset() {
+			}
+
+			@Override
+			public Decimal getDecimal(int i, int precision, int scale) {
+				return Decimal.fromLong(vector9[i], precision, scale);
+			}
+		};
+		for (int i = 0; i < VECTOR_SIZE; i++) {
+			vector9[i] = i;
+		}
+
 		VectorizedColumnBatch batch = new VectorizedColumnBatch(
-				new ColumnVector[]{col0, col1, col2, col3, col4, col5, col6, col7});
+				new ColumnVector[]{col0, col1, col2, col3, col4, col5, col6, col7, col8, col9});
 
 		for (int i = 0; i < VECTOR_SIZE; i++) {
 			ColumnarRow row = new ColumnarRow(batch, i);
 			assertEquals(row.getBoolean(0), i % 2 == 0);
 			assertEquals(row.getString(1).toString(), String.valueOf(i));
 			assertEquals(row.getByte(2), (byte) i);
-			assertEquals(row.getDouble(3), (double) i, 0);
+			assertEquals(row.getDouble(3), i, 0);
 			assertEquals(row.getFloat(4), (float) i, 0);
 			assertEquals(row.getInt(5), i);
-			assertEquals(row.getLong(6), (long) i);
+			assertEquals(row.getLong(6), i);
 			assertEquals(row.getShort(7), (short) i);
+			assertEquals(row.getDecimal(8, 10, 0).toUnscaledLong(), i);
+			assertEquals(row.getDecimal(9, 10, 0).toUnscaledLong(), i);
 		}
 	}
 
