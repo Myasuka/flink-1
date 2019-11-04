@@ -19,6 +19,7 @@
 package org.apache.flink.api.common.operators;
 
 import org.apache.flink.annotation.Internal;
+import org.apache.flink.api.common.resources.AdditiveResourceValue;
 import org.apache.flink.api.common.resources.GPUResource;
 import org.apache.flink.api.common.resources.Resource;
 import org.apache.flink.api.common.resources.ResourceValue;
@@ -31,7 +32,6 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 
-import static org.apache.flink.util.Preconditions.checkArgument;
 import static org.apache.flink.util.Preconditions.checkNotNull;
 
 /**
@@ -67,8 +67,9 @@ public final class ResourceSpec implements Serializable {
 
 	public static final String GPU_NAME = "GPU";
 
-	/** How many cpu cores are needed, use double so we can specify cpu like 0.1. */
-	private final double cpuCores;
+	/** How many cpu cores are needed. Can be null only if it is unknown. */
+	@Nullable
+	private final ResourceValue cpuCores;
 
 	/** How much task heap memory is needed. */
 	@Nullable // can be null only for UNKNOWN
@@ -89,20 +90,19 @@ public final class ResourceSpec implements Serializable {
 	private final Map<String, Resource> extendedResources = new HashMap<>(1);
 
 	private ResourceSpec(
-		double cpuCores,
-		MemorySize taskHeapMemory,
-		MemorySize taskOffHeapMemory,
-		MemorySize onHeapManagedMemory,
-		MemorySize offHeapManagedMemory,
-		Resource... extendedResources) {
+			final ResourceValue cpuCores,
+			final MemorySize taskHeapMemory,
+			final MemorySize taskOffHeapMemory,
+			final MemorySize onHeapManagedMemory,
+			final MemorySize offHeapManagedMemory,
+			final Resource... extendedResources) {
 
-		checkArgument(cpuCores >= 0, "The cpu cores of the resource spec should not be negative.");
-
-		this.cpuCores = cpuCores;
+		this.cpuCores = checkNotNull(cpuCores);
 		this.taskHeapMemory = checkNotNull(taskHeapMemory);
 		this.taskOffHeapMemory = checkNotNull(taskOffHeapMemory);
 		this.onHeapManagedMemory = checkNotNull(onHeapManagedMemory);
 		this.offHeapManagedMemory = checkNotNull(offHeapManagedMemory);
+
 		for (Resource resource : extendedResources) {
 			if (resource != null) {
 				this.extendedResources.put(resource.getName(), resource);
@@ -114,7 +114,7 @@ public final class ResourceSpec implements Serializable {
 	 * Creates a new ResourceSpec with all fields unknown.
 	 */
 	private ResourceSpec() {
-		this.cpuCores = -1;
+		this.cpuCores = null;
 		this.taskHeapMemory = null;
 		this.taskOffHeapMemory = null;
 		this.onHeapManagedMemory = null;
@@ -128,13 +128,15 @@ public final class ResourceSpec implements Serializable {
 	 * @param other Reference to resource to merge in.
 	 * @return The new resource with merged values.
 	 */
-	public ResourceSpec merge(ResourceSpec other) {
+	public ResourceSpec merge(final ResourceSpec other) {
+		checkNotNull(other, "Cannot merge with null resources");
+
 		if (this.equals(UNKNOWN) || other.equals(UNKNOWN)) {
 			return UNKNOWN;
 		}
 
 		ResourceSpec target = new ResourceSpec(
-			this.cpuCores + other.cpuCores,
+			this.cpuCores.merge(other.getCpuCores()),
 			this.taskHeapMemory.add(other.taskHeapMemory),
 			this.taskOffHeapMemory.add(other.taskOffHeapMemory),
 			this.onHeapManagedMemory.add(other.onHeapManagedMemory),
@@ -146,7 +148,7 @@ public final class ResourceSpec implements Serializable {
 		return target;
 	}
 
-	public double getCpuCores() {
+	public ResourceValue getCpuCores() {
 		throwUnsupportedOperationExceptionIfUnknown();
 		return this.cpuCores;
 	}
@@ -209,7 +211,7 @@ public final class ResourceSpec implements Serializable {
 			throw new IllegalArgumentException("Cannot compare specified resources with UNKNOWN resources.");
 		}
 
-		int cmp1 = Double.compare(this.cpuCores, other.cpuCores);
+		int cmp1 = this.cpuCores.compareTo(other.getCpuCores());
 		int cmp2 = this.taskHeapMemory.compareTo(other.taskHeapMemory);
 		int cmp3 = this.taskOffHeapMemory.compareTo(other.taskOffHeapMemory);
 		int cmp4 = this.onHeapManagedMemory.compareTo(other.onHeapManagedMemory);
@@ -233,7 +235,7 @@ public final class ResourceSpec implements Serializable {
 			return true;
 		} else if (obj != null && obj.getClass() == ResourceSpec.class) {
 			ResourceSpec that = (ResourceSpec) obj;
-			return this.cpuCores == that.cpuCores &&
+			return Objects.equals(this.cpuCores, that.cpuCores) &&
 				Objects.equals(this.taskHeapMemory, that.taskHeapMemory) &&
 				Objects.equals(this.taskOffHeapMemory, that.taskOffHeapMemory) &&
 				Objects.equals(this.onHeapManagedMemory, that.onHeapManagedMemory) &&
@@ -246,8 +248,7 @@ public final class ResourceSpec implements Serializable {
 
 	@Override
 	public int hashCode() {
-		final long cpuBits =  Double.doubleToLongBits(cpuCores);
-		int result = (int) (cpuBits ^ (cpuBits >>> 32));
+		int result = Objects.hashCode(cpuCores);
 		result = 31 * result + Objects.hashCode(taskHeapMemory);
 		result = 31 * result + Objects.hashCode(taskOffHeapMemory);
 		result = 31 * result + Objects.hashCode(onHeapManagedMemory);
@@ -301,7 +302,7 @@ public final class ResourceSpec implements Serializable {
 	 */
 	public static class Builder {
 
-		private double cpuCores;
+		private ResourceValue cpuCores;
 		private MemorySize taskHeapMemory;
 		private MemorySize taskOffHeapMemory = MemorySize.ZERO;
 		private MemorySize onHeapManagedMemory = MemorySize.ZERO;
@@ -309,12 +310,12 @@ public final class ResourceSpec implements Serializable {
 		private GPUResource gpuResource;
 
 		private Builder(double cpuCores, MemorySize taskHeapMemory) {
-			this.cpuCores = cpuCores;
+			this.cpuCores = new AdditiveResourceValue(cpuCores);
 			this.taskHeapMemory = taskHeapMemory;
 		}
 
 		public Builder setCpuCores(double cpuCores) {
-			this.cpuCores = cpuCores;
+			this.cpuCores = new AdditiveResourceValue(cpuCores);
 			return this;
 		}
 
