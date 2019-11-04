@@ -35,7 +35,7 @@ import static org.junit.Assert.assertTrue;
 public class ResourceSpecTest extends TestLogger {
 
 	@Test
-	public void testLessThanOrEqual() throws Exception {
+	public void testLessThanOrEqual_BothSpecified() {
 		ResourceSpec rs1 = ResourceSpec.newBuilder(1.0, 100).build();
 		ResourceSpec rs2 = ResourceSpec.newBuilder(1.0, 100).build();
 		assertTrue(rs1.lessThanOrEqual(rs2));
@@ -52,6 +52,23 @@ public class ResourceSpecTest extends TestLogger {
 				build();
 		assertFalse(rs4.lessThanOrEqual(rs3));
 		assertTrue(rs3.lessThanOrEqual(rs4));
+	}
+
+	@Test
+	public void testLessThanOrEqual_BothUnknown(){
+		assertTrue(ResourceSpec.UNKNOWN.lessThanOrEqual(ResourceSpec.UNKNOWN));
+	}
+
+	@Test(expected = IllegalArgumentException.class)
+	public void testLessThanOrEqual_UnknownWithSpecified(){
+		final ResourceSpec rs1 = ResourceSpec.newBuilder(1.0, 100).build();
+		assertTrue(ResourceSpec.UNKNOWN.lessThanOrEqual(rs1));
+	}
+
+	@Test(expected = IllegalArgumentException.class)
+	public void testLessThanOrEqual_SpecifiedWithUnknown(){
+		final ResourceSpec rs1 = ResourceSpec.newBuilder(1.0, 100).build();
+		assertTrue(rs1.lessThanOrEqual(ResourceSpec.UNKNOWN));
 	}
 
 	@Test
