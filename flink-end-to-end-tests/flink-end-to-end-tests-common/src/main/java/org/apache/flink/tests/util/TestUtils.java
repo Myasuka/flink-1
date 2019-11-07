@@ -45,15 +45,29 @@ public enum TestUtils {
 	 * Searches for a jar matching the given regex in the given directory. This method is primarily intended to be used
 	 * for the initialization of static {@link Path} fields for jars that reside in the modules {@code target} directory.
 	 *
-	 * @param jarNameRegex      regex pattern to match against
+	 * @param jarNameRegex regex pattern to match against
 	 * @return Path pointing to the matching jar
 	 * @throws RuntimeException if none or multiple jars could be found
 	 */
 	public static Path getResourceJar(final String jarNameRegex) {
+		return getResourceJar(Paths.get("."), jarNameRegex);
+	}
+
+	/**
+	 * Searches for a jar matching the given regex in the given directory. This method is primarily intended to be used
+	 * for the initialization of static {@link Path} fields for jars that reside in the modules {@code target} directory.
+	 * You can also provide a relative directory, so that will search the relative path under the given moduleDir.
+	 *
+	 * @param relativeDir  relative directory to search the JAR.
+	 * @param jarNameRegex regex pattern to match against
+	 * @return Path pointing to the matching jar
+	 * @throws RuntimeException if none or multiple jars could be found
+	 */
+	public static Path getResourceJar(final Path relativeDir, final String jarNameRegex) {
 		String moduleDirProp = System.getProperty("moduleDir");
 		Preconditions.checkNotNull(moduleDirProp, "The moduleDir property was not set, You can set it when running maven via -DmoduleDir=<path>");
 
-		try (Stream<Path> dependencyJars = Files.walk(Paths.get(moduleDirProp))) {
+		try (Stream<Path> dependencyJars = Files.walk(Paths.get(moduleDirProp).resolve(relativeDir))) {
 			final List<Path> matchingJars = dependencyJars
 				.filter(jar -> Pattern.compile(jarNameRegex).matcher(jar.toAbsolutePath().toString()).find())
 				.collect(Collectors.toList());
