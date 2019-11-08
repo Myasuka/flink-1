@@ -35,8 +35,6 @@ import org.apache.orc.Reader;
 import org.apache.orc.RecordReader;
 import org.apache.orc.StripeInformation;
 import org.apache.orc.TypeDescription;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.io.Closeable;
 import java.io.IOException;
@@ -52,8 +50,6 @@ import java.util.List;
  * of a single split.
  */
 public abstract class OrcReader<T> implements Closeable {
-
-	private static final Logger LOG = LoggerFactory.getLogger(OrcReader.class);
 
 	// the ORC reader
 	private RecordReader orcRowsReader;
@@ -76,13 +72,14 @@ public abstract class OrcReader<T> implements Closeable {
 			int batchSize,
 			Path path,
 			long splitStart,
-			long splitEnd) throws IOException {
+			long splitLength) throws IOException {
 		// open ORC file and create reader
 		org.apache.hadoop.fs.Path hPath = new org.apache.hadoop.fs.Path(path.getPath());
 		Reader orcReader = OrcFile.createReader(hPath, OrcFile.readerOptions(conf));
 
 		// get offset and length for the stripes that start in the split
-		Tuple2<Long, Long> offsetAndLength = getOffsetAndLengthForSplit(splitStart, splitEnd, getStripes(orcReader));
+		Tuple2<Long, Long> offsetAndLength = getOffsetAndLengthForSplit(
+				splitStart, splitLength, getStripes(orcReader));
 
 		// create ORC row reader configuration
 		this.options = orcReader.options()
@@ -170,7 +167,8 @@ public abstract class OrcReader<T> implements Closeable {
 	}
 
 	private Tuple2<Long, Long> getOffsetAndLengthForSplit(
-			long splitStart, long splitEnd, List<StripeInformation> stripes) {
+			long splitStart, long splitLength, List<StripeInformation> stripes) {
+		long splitEnd = splitStart + splitLength;
 		long readStart = Long.MAX_VALUE;
 		long readEnd = Long.MIN_VALUE;
 

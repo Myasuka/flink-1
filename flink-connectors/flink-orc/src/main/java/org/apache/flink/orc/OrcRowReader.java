@@ -45,8 +45,8 @@ public class OrcRowReader extends OrcReader<Row> {
 			int batchSize,
 			Path path,
 			long splitStart,
-			long splitEnd) throws IOException {
-		super(conf, schema, selectedFields, conjunctPredicates, batchSize, path, splitStart, splitEnd);
+			long splitLength) throws IOException {
+		super(conf, schema, selectedFields, conjunctPredicates, batchSize, path, splitStart, splitLength);
 		this.schema = schema;
 		this.selectedFields = selectedFields;
 		// create and initialize the row batch

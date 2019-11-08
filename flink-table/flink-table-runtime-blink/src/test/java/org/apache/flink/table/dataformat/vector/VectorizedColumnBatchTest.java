@@ -93,13 +93,16 @@ public class VectorizedColumnBatchTest {
 
 		long[] vector9 = new long[VECTOR_SIZE];
 		DecimalColumnVector col9 = new DecimalColumnVector() {
+
 			@Override
 			public boolean isNullAt(int i) {
 				return false;
 			}
+
 			@Override
 			public void reset() {
 			}
+
 			@Override
 			public Decimal getDecimal(int i, int precision, int scale) {
 				return Decimal.fromLong(vector9[i], precision, scale);
