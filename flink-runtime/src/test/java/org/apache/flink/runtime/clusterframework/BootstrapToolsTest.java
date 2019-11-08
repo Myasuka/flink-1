@@ -146,6 +146,7 @@ public class BootstrapToolsTest extends TestLogger {
 		final Configuration cfg = new Configuration();
 		final TaskExecutorResourceSpec taskExecutorResourceSpec = new TaskExecutorResourceSpec(
 			new MemorySize(0), // frameworkHeapSize
+			new MemorySize(0), // frameworkOffHeapSize
 			new MemorySize(111), // taskHeapSize
 			new MemorySize(0), // taskOffHeapSize
 			new MemorySize(222), // shuffleMemSize

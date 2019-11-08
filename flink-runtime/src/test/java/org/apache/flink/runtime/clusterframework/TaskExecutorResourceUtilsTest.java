@@ -56,7 +56,8 @@ public class TaskExecutorResourceUtilsTest extends TestLogger {
 		MemorySize.parse("5m"),
 		MemorySize.parse("6m"),
 		MemorySize.parse("7m"),
-		MemorySize.parse("8m"));
+		MemorySize.parse("8m"),
+		MemorySize.parse("9m"));
 
 	@Test
 	public void testGenerateDynamicConfigurations() {
@@ -79,7 +80,8 @@ public class TaskExecutorResourceUtilsTest extends TestLogger {
 
 		assertThat(MemorySize.parse(configs.get("-Xmx")), is(TM_RESOURCE_SPEC.getFrameworkHeapSize().add(TM_RESOURCE_SPEC.getTaskHeapSize()).add(TM_RESOURCE_SPEC.getOnHeapManagedMemorySize())));
 		assertThat(MemorySize.parse(configs.get("-Xms")), is(TM_RESOURCE_SPEC.getFrameworkHeapSize().add(TM_RESOURCE_SPEC.getTaskHeapSize()).add(TM_RESOURCE_SPEC.getOnHeapManagedMemorySize())));
-		assertThat(MemorySize.parse(configs.get("-XX:MaxDirectMemorySize=")), is(TM_RESOURCE_SPEC.getTaskOffHeapSize().add(TM_RESOURCE_SPEC.getShuffleMemSize())));
+		assertThat(MemorySize.parse(configs.get("-XX:MaxDirectMemorySize=")),
+			is(TM_RESOURCE_SPEC.getFrameworkOffHeapMemorySize().add(TM_RESOURCE_SPEC.getTaskOffHeapSize()).add(TM_RESOURCE_SPEC.getShuffleMemSize())));
 		assertThat(MemorySize.parse(configs.get("-XX:MaxMetaspaceSize=")), is(TM_RESOURCE_SPEC.getJvmMetaspaceSize()));
 	}
 
