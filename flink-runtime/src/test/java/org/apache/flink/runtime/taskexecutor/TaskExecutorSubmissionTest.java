@@ -742,6 +742,7 @@ public class TaskExecutorSubmissionTest extends TestLogger {
 			Class<? extends AbstractInvokable> abstractInvokable) throws IOException {
 		PartitionDescriptor partitionDescriptor = new PartitionDescriptor(
 			new IntermediateDataSetID(),
+			1,
 			shuffleDescriptor.getResultPartitionID().getPartitionId(),
 			ResultPartitionType.PIPELINED,
 			1,

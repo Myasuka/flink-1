@@ -101,6 +101,7 @@ public enum PartitionTestUtils {
 		ShuffleDescriptor shuffleDescriptor = NettyShuffleDescriptorBuilder.newBuilder().buildLocal();
 		PartitionDescriptor partitionDescriptor = new PartitionDescriptor(
 			new IntermediateDataSetID(),
+			1,
 			shuffleDescriptor.getResultPartitionID().getPartitionId(),
 			partitionType,
 			1,

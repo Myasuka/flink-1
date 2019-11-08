@@ -247,6 +247,7 @@ public class TaskTest extends TestLogger {
 	public void testExecutionFailsInNetworkRegistrationForPartitions() throws Exception {
 		final PartitionDescriptor partitionDescriptor = new PartitionDescriptor(
 			new IntermediateDataSetID(),
+			1,
 			new IntermediateResultPartitionID(),
 			ResultPartitionType.PIPELINED,
 			1,

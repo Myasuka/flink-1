@@ -42,6 +42,9 @@ public class PartitionDescriptor implements Serializable {
 	/** The ID of the result this partition belongs to. */
 	private final IntermediateDataSetID resultId;
 
+	/** The total number of partitions for the result. */
+	private final int numberOfPartitions;
+
 	/** The ID of the partition. */
 	private final IntermediateResultPartitionID partitionId;
 
@@ -57,11 +60,14 @@ public class PartitionDescriptor implements Serializable {
 	@VisibleForTesting
 	public PartitionDescriptor(
 			IntermediateDataSetID resultId,
+			int numberOfPartitions,
 			IntermediateResultPartitionID partitionId,
 			ResultPartitionType partitionType,
 			int numberOfSubpartitions,
 			int connectionIndex) {
 		this.resultId = checkNotNull(resultId);
+		checkArgument(numberOfPartitions >= 1);
+		this.numberOfPartitions = numberOfPartitions;
 		this.partitionId = checkNotNull(partitionId);
 		this.partitionType = checkNotNull(partitionType);
 		checkArgument(numberOfSubpartitions >= 1);
@@ -71,6 +77,10 @@ public class PartitionDescriptor implements Serializable {
 
 	public IntermediateDataSetID getResultId() {
 		return resultId;
+	}
+
+	public int getNumberOfPartitions() {
+		return numberOfPartitions;
 	}
 
 	public IntermediateResultPartitionID getPartitionId() {
@@ -119,6 +129,7 @@ public class PartitionDescriptor implements Serializable {
 		IntermediateResult result = partition.getIntermediateResult();
 		return new PartitionDescriptor(
 			result.getId(),
+			partition.getIntermediateResult().getNumberOfAssignedPartitions(),
 			partition.getPartitionId(),
 			result.getResultType(),
 			numberOfSubpartitions,

@@ -71,6 +71,7 @@ public class AbstractPartitionTrackerTest extends TestLogger {
 		return new ResultPartitionDeploymentDescriptor(
 			new PartitionDescriptor(
 				new IntermediateDataSetID(),
+				1,
 				resultPartitionId.getPartitionId(),
 				type,
 				1,

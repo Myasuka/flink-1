@@ -105,6 +105,7 @@ public class ResultPartitionFactoryTest extends TestLogger {
 		final ResultPartitionDeploymentDescriptor descriptor = new ResultPartitionDeploymentDescriptor(
 			new PartitionDescriptor(
 				new IntermediateDataSetID(),
+				1,
 				new IntermediateResultPartitionID(),
 				partitionType,
 				1,
