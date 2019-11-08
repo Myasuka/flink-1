@@ -194,6 +194,7 @@ public class ConfigurationUtils {
 		}
 
 		checkArgument(configs.containsKey(TaskManagerOptions.FRAMEWORK_HEAP_MEMORY.key()));
+		checkArgument(configs.containsKey(TaskManagerOptions.FRAMEWORK_OFF_HEAP_MEMORY.key()));
 		checkArgument(configs.containsKey(TaskManagerOptions.TASK_HEAP_MEMORY.key()));
 		checkArgument(configs.containsKey(TaskManagerOptions.TASK_OFF_HEAP_MEMORY.key()));
 		checkArgument(configs.containsKey(TaskManagerOptions.SHUFFLE_MEMORY_MAX.key()));
