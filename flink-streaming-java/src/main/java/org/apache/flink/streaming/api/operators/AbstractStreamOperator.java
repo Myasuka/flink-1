@@ -178,7 +178,7 @@ public abstract class AbstractStreamOperator<OUT>
 		this.config = config;
 		try {
 			OperatorMetricGroup operatorMetricGroup = environment.getMetricGroup().getOrAddOperator(config.getOperatorID(), config.getOperatorName());
-			this.output = new CountingOutput(output, operatorMetricGroup.getIOMetricGroup().getNumRecordsOutCounter());
+			this.output = new CountingOutput<>(output, operatorMetricGroup.getIOMetricGroup().getNumRecordsOutCounter());
 			if (config.isChainStart()) {
 				operatorMetricGroup.getIOMetricGroup().reuseInputMetricsForTask();
 			}
@@ -636,8 +636,7 @@ public abstract class AbstractStreamOperator<OUT>
 		if (keyedStateBackend != null) {
 			try {
 				// need to work around type restrictions
-				@SuppressWarnings("unchecked,rawtypes")
-				AbstractKeyedStateBackend rawBackend = (AbstractKeyedStateBackend) keyedStateBackend;
+				AbstractKeyedStateBackend rawBackend = keyedStateBackend;
 
 				rawBackend.setCurrentKey(key);
 			} catch (Exception e) {
@@ -646,7 +645,6 @@ public abstract class AbstractStreamOperator<OUT>
 		}
 	}
 
-	@SuppressWarnings({"unchecked", "rawtypes"})
 	public Object getCurrentKey() {
 		if (keyedStateBackend != null) {
 			return keyedStateBackend.getCurrentKey();
@@ -672,7 +670,6 @@ public abstract class AbstractStreamOperator<OUT>
 	public final ChainingStrategy getChainingStrategy() {
 		return chainingStrategy;
 	}
-
 
 	// ------------------------------------------------------------------------
 	//  Metrics
@@ -777,6 +774,8 @@ public abstract class AbstractStreamOperator<OUT>
 		// the following casting is to overcome type restrictions.
 		KeyedStateBackend<K> keyedStateBackend = getKeyedStateBackend();
 		TypeSerializer<K> keySerializer = keyedStateBackend.getKeySerializer();
+
+		@SuppressWarnings("unchecked")
 		InternalTimeServiceManager<K> keyedTimeServiceHandler = (InternalTimeServiceManager<K>) timeServiceManager;
 		TimerSerializer<K, N> timerSerializer = new TimerSerializer<>(keySerializer, namespaceSerializer);
 		return keyedTimeServiceHandler.getInternalTimerService(name, timerSerializer, triggerable);

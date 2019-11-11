@@ -73,28 +73,25 @@ public class SourceStreamTask<OUT, SRC extends SourceFunction<OUT>, OP extends S
 		if (source instanceof ExternallyInducedSource) {
 			externallyInducedCheckpoints = true;
 
-			ExternallyInducedSource.CheckpointTrigger triggerHook = new ExternallyInducedSource.CheckpointTrigger() {
+			ExternallyInducedSource.CheckpointTrigger triggerHook = checkpointId -> {
 
-				@Override
-				public void triggerCheckpoint(long checkpointId) throws FlinkException {
-					// TODO - we need to see how to derive those. We should probably not encode this in the
-					// TODO -   source's trigger message, but do a handshake in this task between the trigger
-					// TODO -   message from the master, and the source's trigger notification
-					final CheckpointOptions checkpointOptions = CheckpointOptions.forCheckpointWithDefaultLocation();
-					final long timestamp = System.currentTimeMillis();
+				// TODO - we need to see how to derive those. We should probably not encode this in the
+				// TODO -   source's trigger message, but do a handshake in this task between the trigger
+				// TODO -   message from the master, and the source's trigger notification
+				final CheckpointOptions checkpointOptions = CheckpointOptions.forCheckpointWithDefaultLocation();
+				final long timestamp = System.currentTimeMillis();
 
-					final CheckpointMetaData checkpointMetaData = new CheckpointMetaData(checkpointId, timestamp);
+				final CheckpointMetaData checkpointMetaData = new CheckpointMetaData(checkpointId, timestamp);
 
-					try {
-						SourceStreamTask.super.triggerCheckpointAsync(checkpointMetaData, checkpointOptions, false)
-							.get();
-					}
-					catch (RuntimeException e) {
-						throw e;
-					}
-					catch (Exception e) {
-						throw new FlinkException(e.getMessage(), e);
-					}
+				try {
+					SourceStreamTask.super.triggerCheckpointAsync(checkpointMetaData, checkpointOptions, false)
+						.get();
+				}
+				catch (RuntimeException e) {
+					throw e;
+				}
+				catch (Exception e) {
+					throw new FlinkException(e.getMessage(), e);
 				}
 			};
 
@@ -103,7 +100,7 @@ public class SourceStreamTask<OUT, SRC extends SourceFunction<OUT>, OP extends S
 	}
 
 	@Override
-	protected void advanceToEndOfEventTime() throws Exception {
+	protected void advanceToEndOfEventTime() {
 		headOperator.advanceToEndOfEventTime();
 	}
 
@@ -113,7 +110,7 @@ public class SourceStreamTask<OUT, SRC extends SourceFunction<OUT>, OP extends S
 	}
 
 	@Override
-	protected void processInput(MailboxDefaultAction.Controller controller) throws Exception {
+	protected void processInput(MailboxDefaultAction.Controller controller) {
 
 		controller.suspendDefaultAction();
 
@@ -141,7 +138,7 @@ public class SourceStreamTask<OUT, SRC extends SourceFunction<OUT>, OP extends S
 	}
 
 	@Override
-	protected void finishTask() throws Exception {
+	protected void finishTask() {
 		isFinished = true;
 		cancelTask();
 	}
