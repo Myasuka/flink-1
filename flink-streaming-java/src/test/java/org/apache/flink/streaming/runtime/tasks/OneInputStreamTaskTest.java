@@ -622,9 +622,11 @@ public class OneInputStreamTaskTest extends TestLogger {
 		testHarness.waitForTaskCompletion();
 
 		expectedOutput.add(new StreamRecord<>("Hello"));
-		expectedOutput.add(new StreamRecord<>("[Operator0]: EndOfInput"));
+		expectedOutput.add(new StreamRecord<>("[Operator0]: End of input"));
+		expectedOutput.add(new StreamRecord<>("[Operator0]: Timer registered in endInput"));
 		expectedOutput.add(new StreamRecord<>("[Operator0]: Bye"));
-		expectedOutput.add(new StreamRecord<>("[Operator1]: EndOfInput"));
+		expectedOutput.add(new StreamRecord<>("[Operator1]: End of input"));
+		expectedOutput.add(new StreamRecord<>("[Operator1]: Timer registered in endInput"));
 		expectedOutput.add(new StreamRecord<>("[Operator1]: Bye"));
 
 		TestHarnessUtil.assertOutputEquals("Output was not correct.",

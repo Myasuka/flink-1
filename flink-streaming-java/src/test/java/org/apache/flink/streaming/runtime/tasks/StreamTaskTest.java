@@ -20,6 +20,7 @@ package org.apache.flink.streaming.runtime.tasks;
 
 import org.apache.flink.api.common.ExecutionConfig;
 import org.apache.flink.api.common.JobID;
+import org.apache.flink.api.common.typeinfo.BasicTypeInfo;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.api.common.typeutils.base.StringSerializer;
 import org.apache.flink.configuration.CheckpointingOptions;
@@ -104,10 +105,13 @@ import org.apache.flink.streaming.api.TimeCharacteristic;
 import org.apache.flink.streaming.api.functions.source.SourceFunction;
 import org.apache.flink.streaming.api.graph.StreamConfig;
 import org.apache.flink.streaming.api.operators.AbstractStreamOperator;
+import org.apache.flink.streaming.api.operators.BoundedOneInput;
 import org.apache.flink.streaming.api.operators.ChainingStrategy;
 import org.apache.flink.streaming.api.operators.InternalTimeServiceManager;
+import org.apache.flink.streaming.api.operators.OneInputStreamOperator;
 import org.apache.flink.streaming.api.operators.OperatorSnapshotFutures;
 import org.apache.flink.streaming.api.operators.Output;
+import org.apache.flink.streaming.api.operators.StreamMap;
 import org.apache.flink.streaming.api.operators.StreamOperator;
 import org.apache.flink.streaming.api.operators.StreamOperatorFactory;
 import org.apache.flink.streaming.api.operators.StreamOperatorStateContext;
@@ -889,6 +893,57 @@ public class StreamTaskTest extends TestLogger {
 				.noneMatch(thread -> thread.getName().startsWith(RecordWriter.DEFAULT_OUTPUT_FLUSH_THREAD_NAME)));
 	}
 
+	@Test
+	public void testNonHeadOperatorEndingInputExceptionally() throws Exception {
+		StreamConfig streamConfig = new StreamConfig(new Configuration());
+		streamConfig.setStreamOperator(new StreamSource<>(new MockSourceFunction()));
+		streamConfig.setOperatorID(new OperatorID());
+
+		new StreamConfigChainer(new OperatorID(), streamConfig)
+			.chain(
+				new OperatorID(),
+				new ExceptionallyEndedInputOperator(),
+				BasicTypeInfo.VOID_TYPE_INFO.createSerializer(new ExecutionConfig()))
+			.finish();
+
+		try (MockEnvironment mockEnvironment = new MockEnvironmentBuilder()
+			.setTaskConfiguration(streamConfig.getConfiguration())
+			.build()) {
+
+			mockEnvironment.addOutput(new ArrayList<>());
+			mockEnvironment.setExpectedExternalFailureCause(Throwable.class);
+
+			RunningTask<StreamTask<Void, ?>> task = runTask(() -> new NoOpStreamTask<>(mockEnvironment));
+			task.waitForTaskCompletion(false);
+
+			Optional<? extends Throwable> actualExternalFailureCause = mockEnvironment.getActualExternalFailureCause();
+			assertTrue(actualExternalFailureCause.isPresent());
+			ExceptionUtils.findThrowableWithMessage(actualExternalFailureCause.get(), "exception at ending input");
+		}
+	}
+
+	@Test
+	public void testOperatorClosingExceptionally() throws Exception {
+		StreamConfig streamConfig = new StreamConfig(new Configuration());
+		streamConfig.setStreamOperator(new ExceptionallyClosedOperator());
+		streamConfig.setOperatorID(new OperatorID());
+
+		try (MockEnvironment mockEnvironment = new MockEnvironmentBuilder()
+			.setTaskConfiguration(streamConfig.getConfiguration())
+			.build()) {
+
+			mockEnvironment.addOutput(new ArrayList<>());
+			mockEnvironment.setExpectedExternalFailureCause(Throwable.class);
+
+			RunningTask<StreamTask<Void, ?>> task = runTask(() -> new NoOpStreamTask<>(mockEnvironment));
+			task.waitForTaskCompletion(false);
+
+			Optional<? extends Throwable> actualExternalFailureCause = mockEnvironment.getActualExternalFailureCause();
+			assertTrue(actualExternalFailureCause.isPresent());
+			ExceptionUtils.findThrowableWithMessage(actualExternalFailureCause.get(), "exception at closing");
+		}
+	}
+
 	// ------------------------------------------------------------------------
 	//  Test Utilities
 	// ------------------------------------------------------------------------
@@ -1439,11 +1494,16 @@ public class StreamTaskTest extends TestLogger {
 		}
 
 		@Override
+		public StreamOperator<?> getHeadOperator() {
+			return new StreamMap<String, String>(value -> value);
+		}
+
+		@Override
 		protected void init() throws Exception {
 			checkTaskThreadInfo();
 
 			// Create a time trigger to validate that it would also be invoked in the task's thread.
-			getProcessingTimeService(0).registerTimer(0, new ProcessingTimeCallback() {
+			getProcessingTimeService(getHeadOperator(), 0).registerTimer(0, new ProcessingTimeCallback() {
 				@Override
 				public void onProcessingTime(long timestamp) throws Exception {
 					checkTaskThreadInfo();
@@ -1771,6 +1831,27 @@ public class StreamTaskTest extends TestLogger {
 		@Override
 		public Class<? extends StreamOperator> getStreamOperatorClass(ClassLoader classLoader) {
 			throw new UnsupportedOperationException();
+		}
+	}
+
+	private static class ExceptionallyEndedInputOperator extends AbstractStreamOperator<Void>
+		implements OneInputStreamOperator<Void, Void>, BoundedOneInput {
+
+		@Override
+		public void processElement(StreamRecord element) throws Exception {
+		}
+
+		@Override
+		public void endInput() throws Exception {
+			throw new Exception("exception at ending input");
+		}
+	}
+
+	private static class ExceptionallyClosedOperator extends AbstractStreamOperator<Void> {
+
+		@Override
+		public void close() throws Exception {
+			throw new Exception("exception at closing");
 		}
 	}
 }

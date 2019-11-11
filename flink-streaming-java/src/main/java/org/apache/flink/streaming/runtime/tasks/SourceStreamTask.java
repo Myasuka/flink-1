@@ -123,7 +123,10 @@ public class SourceStreamTask<OUT, SRC extends SourceFunction<OUT>, OP extends S
 		sourceThread.start();
 		sourceThread.getCompletionFuture().whenComplete((Void ignore, Throwable sourceThreadThrowable) -> {
 			if (sourceThreadThrowable == null || isFinished) {
-				mailboxProcessor.allActionsCompleted();
+				CompletableFuture<?> future = !isCanceled() ?
+					new ClosingOperatorOperation().closeAllOperatorsAsync() : CompletableFuture.completedFuture(null);
+
+				future.thenRun(mailboxProcessor::allActionsCompleted);
 			} else {
 				mailboxProcessor.reportThrowable(sourceThreadThrowable);
 			}

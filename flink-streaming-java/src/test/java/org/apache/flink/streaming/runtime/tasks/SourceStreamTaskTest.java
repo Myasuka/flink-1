@@ -190,9 +190,11 @@ public class SourceStreamTaskTest {
 		testHarness.waitForTaskCompletion();
 
 		expectedOutput.add(new StreamRecord<>("Hello"));
-		expectedOutput.add(new StreamRecord<>("[Source0]: EndOfInput"));
+		expectedOutput.add(new StreamRecord<>("[Source0]: End of input"));
+		expectedOutput.add(new StreamRecord<>("[Source0]: Timer registered in endInput"));
 		expectedOutput.add(new StreamRecord<>("[Source0]: Bye"));
-		expectedOutput.add(new StreamRecord<>("[Operator1]: EndOfInput"));
+		expectedOutput.add(new StreamRecord<>("[Operator1]: End of input"));
+		expectedOutput.add(new StreamRecord<>("[Operator1]: Timer registered in endInput"));
 		expectedOutput.add(new StreamRecord<>("[Operator1]: Bye"));
 
 		TestHarnessUtil.assertOutputEquals("Output was not correct.",
@@ -495,12 +497,21 @@ public class SourceStreamTaskTest {
 
 		@Override
 		public void endInput() {
-			output.collect(new StreamRecord<>("[" + name + "]: EndOfInput"));
+			output.collect(new StreamRecord<>("[" + name + "]: End of input"));
+
+			getProcessingTimeService().registerTimer(
+				getProcessingTimeService().getCurrentProcessingTime() + 5,
+				timestamp -> output.collect(new StreamRecord<>("[" + name + "]: Timer registered in endInput")));
 		}
 
 		@Override
-		public void close() {
+		public void close() throws Exception {
+			getProcessingTimeService().registerTimer(
+				getProcessingTimeService().getCurrentProcessingTime(),
+				timestamp -> output.collect(new StreamRecord<>("[" + name + "]: Timer not triggered")));
+
 			output.collect(new StreamRecord<>("[" + name + "]: Bye"));
+			super.close();
 		}
 	}
 }

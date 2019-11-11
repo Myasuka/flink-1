@@ -20,6 +20,7 @@ package org.apache.flink.streaming.util;
 
 import org.apache.flink.streaming.api.operators.AbstractStreamOperator;
 import org.apache.flink.streaming.api.operators.BoundedMultiInput;
+import org.apache.flink.streaming.api.operators.InputSelection;
 import org.apache.flink.streaming.api.operators.TwoInputStreamOperator;
 import org.apache.flink.streaming.runtime.streamrecord.StreamRecord;
 
@@ -33,8 +34,11 @@ public class TestBoundedTwoInputOperator extends AbstractStreamOperator<String>
 
 	private final String name;
 
+	private InputSelection finishedInputs;
+
 	public TestBoundedTwoInputOperator(String name) {
 		this.name = name;
+		this.finishedInputs = new InputSelection.Builder().build();
 	}
 
 	@Override
@@ -49,11 +53,22 @@ public class TestBoundedTwoInputOperator extends AbstractStreamOperator<String>
 
 	@Override
 	public void endInput(int inputId) {
-		output.collect(new StreamRecord<>("[" + name + "-" + inputId + "]: EndOfInput"));
+		finishedInputs = InputSelection.Builder.from(finishedInputs).select(inputId).build();
+
+		output.collect(new StreamRecord<>("[" + name + "-" + inputId + "]: End of input"));
+		if (finishedInputs.isALLMaskOf2()) {
+			getProcessingTimeService().registerTimer(
+				getProcessingTimeService().getCurrentProcessingTime() + 5,
+				timestamp -> output.collect(new StreamRecord<>("[" + name + "]: Timer registered in endInput")));
+		}
 	}
 
 	@Override
 	public void close() throws Exception {
+		getProcessingTimeService().registerTimer(
+			getProcessingTimeService().getCurrentProcessingTime(),
+			timestamp -> output.collect(new StreamRecord<>("[" + name + "]: Timer not triggered")));
+
 		output.collect(new StreamRecord<>("[" + name + "]: Bye"));
 		super.close();
 	}

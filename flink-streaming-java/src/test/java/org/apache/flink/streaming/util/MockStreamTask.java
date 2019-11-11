@@ -154,7 +154,7 @@ public class MockStreamTask<OUT, OP extends StreamOperator<OUT>> extends StreamT
 	}
 
 	@Override
-	public ProcessingTimeService getProcessingTimeService(int operatorIndex) {
+	public ProcessingTimeService getProcessingTimeService(StreamOperator<?> operator, int chainIndex) {
 		return processingTimeService;
 	}
 }
