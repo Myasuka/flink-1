@@ -20,6 +20,7 @@ package org.apache.flink.runtime.clusterframework.types;
 
 import org.apache.flink.api.common.operators.ResourceSpec;
 import org.apache.flink.api.common.resources.GPUResource;
+import org.apache.flink.api.common.resources.ResourceValue;
 import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.core.testutils.CommonTestUtils;
 
@@ -29,6 +30,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
+import static org.apache.flink.api.common.resources.ResourceValueTest.assertValueEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
@@ -130,7 +132,9 @@ public class ResourceProfileTest {
 		assertEquals(1.0, rp.getCpuCores(), 0.000001);
 		assertEquals(150, rp.getTotalMemory().getMebiBytes());
 		assertEquals(100, rp.getOperatorsMemory().getMebiBytes());
-		assertEquals(1.6, rp.getExtendedResources().get(ResourceSpec.GPU_NAME).getValue(), 0.000001);
+
+		final ResourceValue gpuValue = rp.getExtendedResources().get(GPUResource.NAME).getValue();
+		assertValueEquals(1.6, gpuValue);
 	}
 
 	@Test
