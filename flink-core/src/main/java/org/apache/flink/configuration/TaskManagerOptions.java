@@ -303,7 +303,7 @@ public class TaskManagerOptions {
 	 */
 	public static final ConfigOption<String> TASK_OFF_HEAP_MEMORY =
 		key("taskmanager.memory.task.off-heap.size")
-			.defaultValue("1m")
+			.defaultValue("0b")
 			.withDescription("Task Heap Memory size for TaskExecutors. This is the size of off heap memory (JVM direct"
 				+ " memory or native memory) reserved for user code.");
 
