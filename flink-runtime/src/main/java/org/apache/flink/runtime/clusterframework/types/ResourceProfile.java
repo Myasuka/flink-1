@@ -322,6 +322,18 @@ public class ResourceProfile implements Serializable {
 		return false;
 	}
 
+	/**
+	 * Check whether the other resource profile has the same resources as this one.
+	 *
+	 * @param other resource profile to check
+	 * @return true if the other resource profile has the same resources as this one
+	 */
+	public boolean hasSameResources(final ResourceProfile other) {
+		checkNotNull(other);
+
+		return isMatching(other) && other.isMatching(this);
+	}
+
 	// ------------------------------------------------------------------------
 
 	@Override
@@ -336,6 +348,15 @@ public class ResourceProfile implements Serializable {
 		return result;
 	}
 
+	/**
+	 * Note: Avoid to use this method to do resource checking,
+	 * unless a strict comparison is desired regarding the double values.
+	 * Use {@link #isMatching(ResourceProfile)} or {@link #hasSameResources(ResourceProfile)}
+	 * instead to compare resources ignoring smaller deltas of double values.
+	 *
+	 * @param obj to compare
+	 * @return true if the given obj is exactly the same as this one
+	 */
 	@Override
 	public boolean equals(Object obj) {
 		if (obj == this) {
