@@ -62,6 +62,9 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
+/**
+ * Tests for {@link JobGraphGenerator}.
+ */
 public class JobGraphGeneratorTest {
 
 	@Rule
@@ -69,7 +72,7 @@ public class JobGraphGeneratorTest {
 
 	/**
 	 * Verifies that the resources are merged correctly for chained operators when
-	 * generating job graph
+	 * generating job graph.
 	 */
 	@Test
 	public void testResourcesForChainedOperators() throws Exception {
@@ -134,16 +137,16 @@ public class JobGraphGeneratorTest {
 		JobVertex sinkVertex = jobGraph.getVerticesSortedTopologicallyFromSources().get(3);
 		JobVertex iterationSyncVertex = jobGraph.getVerticesSortedTopologicallyFromSources().get(4);
 
-		assertTrue(sourceMapFilterVertex.getMinResources().equals(resource1.merge(resource2).merge(resource3)));
-		assertTrue(iterationHeadVertex.getPreferredResources().equals(resource4));
-		assertTrue(feedbackVertex.getMinResources().equals(resource5.merge(resource6)));
-		assertTrue(sinkVertex.getPreferredResources().equals(resource7));
-		assertTrue(iterationSyncVertex.getMinResources().equals(resource4));
+		assertTrue(sourceMapFilterVertex.getMinResources().hasSameResources(resource1.merge(resource2).merge(resource3)));
+		assertTrue(iterationHeadVertex.getPreferredResources().hasSameResources(resource4));
+		assertTrue(feedbackVertex.getMinResources().hasSameResources(resource5.merge(resource6)));
+		assertTrue(sinkVertex.getPreferredResources().hasSameResources(resource7));
+		assertTrue(iterationSyncVertex.getMinResources().hasSameResources(resource4));
 	}
 
 	/**
 	 * Verifies that the resources are set onto each job vertex correctly when generating job graph
-	 * which covers the delta iteration case
+	 * which covers the delta iteration case.
 	 */
 	@Test
 	public void testResourcesForDeltaIteration() throws Exception{
@@ -210,14 +213,14 @@ public class JobGraphGeneratorTest {
 		JobVertex sinkVertex = jobGraph.getVerticesSortedTopologicallyFromSources().get(5);
 		JobVertex iterationSyncVertex = jobGraph.getVerticesSortedTopologicallyFromSources().get(6);
 
-		assertTrue(sourceMapVertex.getMinResources().equals(resource1.merge(resource2)));
-		assertTrue(iterationHeadVertex.getPreferredResources().equals(resource3));
-		assertTrue(deltaVertex.getMinResources().equals(resource4));
+		assertTrue(sourceMapVertex.getMinResources().hasSameResources(resource1.merge(resource2)));
+		assertTrue(iterationHeadVertex.getPreferredResources().hasSameResources(resource3));
+		assertTrue(deltaVertex.getMinResources().hasSameResources(resource4));
 		// the iteration tail task will be scheduled in the same instance with iteration head, and currently not set resources.
 		assertTrue(iterationTailVertex.getPreferredResources().equals(ResourceSpec.DEFAULT));
-		assertTrue(feedbackVertex.getMinResources().equals(resource5));
-		assertTrue(sinkVertex.getPreferredResources().equals(resource6));
-		assertTrue(iterationSyncVertex.getMinResources().equals(resource3));
+		assertTrue(feedbackVertex.getMinResources().hasSameResources(resource5));
+		assertTrue(sinkVertex.getPreferredResources().hasSameResources(resource6));
+		assertTrue(iterationSyncVertex.getMinResources().hasSameResources(resource3));
 	}
 
 	@Test
