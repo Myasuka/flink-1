@@ -226,6 +226,22 @@ public final class ResourceSpec implements Serializable {
 		return false;
 	}
 
+	@VisibleForTesting
+	public boolean hasSameResources(final ResourceSpec other) {
+		checkNotNull(other, "Cannot compare with null resources.");
+
+		return lessThanOrEqual(other) && other.lessThanOrEqual(this);
+	}
+
+	/**
+	 * Note: Avoid to use this method to do resource checking,
+	 * unless a strict comparison is desired regarding the double values.
+	 * Use {@link #lessThanOrEqual(ResourceSpec)} or {@link #hasSameResources(ResourceSpec)}
+	 * instead to compare resources ignoring smaller deltas of double values.
+	 *
+	 * @param obj to compare
+	 * @return true if the given obj is exactly the same as this one
+	 */
 	@Override
 	public boolean equals(Object obj) {
 		if (obj == this) {
