@@ -23,6 +23,7 @@ import org.apache.flink.util.TestLogger;
 
 import org.junit.Test;
 
+import static org.apache.flink.api.common.resources.ResourceValueTest.assertValueEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
@@ -122,10 +123,10 @@ public class ResourceSpecTest extends TestLogger {
 		ResourceSpec rs3 = rs1.merge(rs2);
 		assertEquals(2.0, rs3.getCpuCores(), 0.000001);
 		assertEquals(200, rs3.getTaskHeapMemory().getMebiBytes());
-		assertEquals(1.1, rs3.getGPUResource(), 0.000001);
+		assertValueEquals(1.1, rs3.getGPUResource().getValue());
 
 		ResourceSpec rs4 = rs1.merge(rs3);
-		assertEquals(2.2, rs4.getGPUResource(), 0.000001);
+		assertValueEquals(2.2, rs4.getGPUResource().getValue());
 	}
 
 	@Test
