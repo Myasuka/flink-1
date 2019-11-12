@@ -20,6 +20,7 @@ package org.apache.flink.api.common.operators;
 
 import org.apache.flink.annotation.Internal;
 import org.apache.flink.annotation.VisibleForTesting;
+import org.apache.flink.api.common.resources.CPUResource;
 import org.apache.flink.api.common.resources.GPUResource;
 import org.apache.flink.api.common.resources.Resource;
 import org.apache.flink.configuration.MemorySize;
@@ -65,8 +66,9 @@ public final class ResourceSpec implements Serializable {
 	 */
 	public static final ResourceSpec DEFAULT = UNKNOWN;
 
-	/** How many cpu cores are needed, use double so we can specify cpu like 0.1. */
-	private final double cpuCores;
+	/** How many cpu cores are needed. Can be null only if it is unknown. */
+	@Nullable
+	private final Resource cpuCores;
 
 	/** How much task heap memory is needed. */
 	@Nullable // can be null only for UNKNOWN
@@ -87,20 +89,22 @@ public final class ResourceSpec implements Serializable {
 	private final Map<String, Resource> extendedResources = new HashMap<>(1);
 
 	private ResourceSpec(
-		double cpuCores,
-		MemorySize taskHeapMemory,
-		MemorySize taskOffHeapMemory,
-		MemorySize onHeapManagedMemory,
-		MemorySize offHeapManagedMemory,
-		Resource... extendedResources) {
+			final Resource cpuCores,
+			final MemorySize taskHeapMemory,
+			final MemorySize taskOffHeapMemory,
+			final MemorySize onHeapManagedMemory,
+			final MemorySize offHeapManagedMemory,
+			final Resource... extendedResources) {
 
-		checkArgument(cpuCores >= 0, "The cpu cores of the resource spec should not be negative.");
+		checkNotNull(cpuCores);
+		checkArgument(cpuCores instanceof CPUResource, "cpuCores must be CPUResource");
 
 		this.cpuCores = cpuCores;
 		this.taskHeapMemory = checkNotNull(taskHeapMemory);
 		this.taskOffHeapMemory = checkNotNull(taskOffHeapMemory);
 		this.onHeapManagedMemory = checkNotNull(onHeapManagedMemory);
 		this.offHeapManagedMemory = checkNotNull(offHeapManagedMemory);
+
 		for (Resource resource : extendedResources) {
 			if (resource != null) {
 				this.extendedResources.put(resource.getName(), resource);
@@ -112,7 +116,7 @@ public final class ResourceSpec implements Serializable {
 	 * Creates a new ResourceSpec with all fields unknown.
 	 */
 	private ResourceSpec() {
-		this.cpuCores = -1;
+		this.cpuCores = null;
 		this.taskHeapMemory = null;
 		this.taskOffHeapMemory = null;
 		this.onHeapManagedMemory = null;
@@ -126,13 +130,15 @@ public final class ResourceSpec implements Serializable {
 	 * @param other Reference to resource to merge in.
 	 * @return The new resource with merged values.
 	 */
-	public ResourceSpec merge(ResourceSpec other) {
+	public ResourceSpec merge(final ResourceSpec other) {
+		checkNotNull(other, "Cannot merge with null resources");
+
 		if (this.equals(UNKNOWN) || other.equals(UNKNOWN)) {
 			return UNKNOWN;
 		}
 
 		ResourceSpec target = new ResourceSpec(
-			this.cpuCores + other.cpuCores,
+			this.cpuCores.merge(other.cpuCores),
 			this.taskHeapMemory.add(other.taskHeapMemory),
 			this.taskOffHeapMemory.add(other.taskOffHeapMemory),
 			this.onHeapManagedMemory.add(other.onHeapManagedMemory),
@@ -144,7 +150,7 @@ public final class ResourceSpec implements Serializable {
 		return target;
 	}
 
-	public double getCpuCores() {
+	public Resource getCpuCores() {
 		throwUnsupportedOperationExceptionIfUnknown();
 		return this.cpuCores;
 	}
@@ -202,7 +208,7 @@ public final class ResourceSpec implements Serializable {
 			throw new IllegalArgumentException("Cannot compare specified resources with UNKNOWN resources.");
 		}
 
-		int cmp1 = Double.compare(this.cpuCores, other.cpuCores);
+		int cmp1 = this.cpuCores.getValue().compareTo(other.getCpuCores().getValue());
 		int cmp2 = this.taskHeapMemory.compareTo(other.taskHeapMemory);
 		int cmp3 = this.taskOffHeapMemory.compareTo(other.taskOffHeapMemory);
 		int cmp4 = this.onHeapManagedMemory.compareTo(other.onHeapManagedMemory);
@@ -226,7 +232,7 @@ public final class ResourceSpec implements Serializable {
 			return true;
 		} else if (obj != null && obj.getClass() == ResourceSpec.class) {
 			ResourceSpec that = (ResourceSpec) obj;
-			return this.cpuCores == that.cpuCores &&
+			return Objects.equals(this.cpuCores, that.cpuCores) &&
 				Objects.equals(this.taskHeapMemory, that.taskHeapMemory) &&
 				Objects.equals(this.taskOffHeapMemory, that.taskOffHeapMemory) &&
 				Objects.equals(this.onHeapManagedMemory, that.onHeapManagedMemory) &&
@@ -239,8 +245,7 @@ public final class ResourceSpec implements Serializable {
 
 	@Override
 	public int hashCode() {
-		final long cpuBits =  Double.doubleToLongBits(cpuCores);
-		int result = (int) (cpuBits ^ (cpuBits >>> 32));
+		int result = Objects.hashCode(cpuCores);
 		result = 31 * result + Objects.hashCode(taskHeapMemory);
 		result = 31 * result + Objects.hashCode(taskOffHeapMemory);
 		result = 31 * result + Objects.hashCode(onHeapManagedMemory);
@@ -281,12 +286,8 @@ public final class ResourceSpec implements Serializable {
 	//  builder
 	// ------------------------------------------------------------------------
 
-	public static Builder newBuilder(double cpuCores, MemorySize taskHeapMemory) {
-		return new Builder(cpuCores, taskHeapMemory);
-	}
-
 	public static Builder newBuilder(double cpuCores, int taskHeapMemoryMB) {
-		return newBuilder(cpuCores, MemorySize.parse(taskHeapMemoryMB + "m"));
+		return new Builder(new CPUResource(cpuCores), MemorySize.parse(taskHeapMemoryMB + "m"));
 	}
 
 	/**
@@ -294,20 +295,20 @@ public final class ResourceSpec implements Serializable {
 	 */
 	public static class Builder {
 
-		private double cpuCores;
+		private Resource cpuCores;
 		private MemorySize taskHeapMemory;
 		private MemorySize taskOffHeapMemory = MemorySize.ZERO;
 		private MemorySize onHeapManagedMemory = MemorySize.ZERO;
 		private MemorySize offHeapManagedMemory = MemorySize.ZERO;
 		private GPUResource gpuResource;
 
-		private Builder(double cpuCores, MemorySize taskHeapMemory) {
+		private Builder(CPUResource cpuCores, MemorySize taskHeapMemory) {
 			this.cpuCores = cpuCores;
 			this.taskHeapMemory = taskHeapMemory;
 		}
 
 		public Builder setCpuCores(double cpuCores) {
-			this.cpuCores = cpuCores;
+			this.cpuCores = new CPUResource(cpuCores);
 			return this;
 		}
 
