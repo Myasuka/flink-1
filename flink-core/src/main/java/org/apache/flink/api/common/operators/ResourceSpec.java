@@ -241,10 +241,10 @@ public final class ResourceSpec implements Serializable {
 	 * Note: Avoid to use this method to do resource checking,
 	 * unless a strict comparison is desired regarding the double values.
 	 * Use {@link #lessThanOrEqual(ResourceSpec)} or {@link #hasSameResources(ResourceSpec)}
-	 * instead to ignore smaller deltas of double values.
+	 * instead to compare resources ignoring smaller deltas of double values.
 	 *
 	 * @param obj to compare
-	 * @return true if the given obj strictly matches this one
+	 * @return true if the given obj is exactly the same as this one
 	 */
 	@Override
 	public boolean equals(Object obj) {
