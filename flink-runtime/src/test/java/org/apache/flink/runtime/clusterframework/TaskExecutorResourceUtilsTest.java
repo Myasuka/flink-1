@@ -45,7 +45,7 @@ public class TaskExecutorResourceUtilsTest extends TestLogger {
 
 	private static final MemorySize TASK_HEAP_SIZE = MemorySize.parse("100m");
 	private static final MemorySize MANAGED_MEM_SIZE = MemorySize.parse("200m");
-	private static final MemorySize TOTAL_FLINK_MEM_SIZE = MemorySize.parse("800m");
+	private static final MemorySize TOTAL_FLINK_MEM_SIZE = MemorySize.parse("850m");
 	private static final MemorySize TOTAL_PROCESS_MEM_SIZE = MemorySize.parse("1g");
 
 	private static final TaskExecutorResourceSpec TM_RESOURCE_SPEC = new TaskExecutorResourceSpec(
