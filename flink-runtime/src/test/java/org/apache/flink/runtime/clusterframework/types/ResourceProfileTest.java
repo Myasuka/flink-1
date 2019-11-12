@@ -19,6 +19,7 @@
 package org.apache.flink.runtime.clusterframework.types;
 
 import org.apache.flink.api.common.operators.ResourceSpec;
+import org.apache.flink.api.common.resources.CPUResource;
 import org.apache.flink.api.common.resources.GPUResource;
 import org.apache.flink.api.common.resources.ResourceValue;
 import org.apache.flink.configuration.MemorySize;
@@ -129,7 +130,7 @@ public class ResourceProfileTest {
 				build();
 		ResourceProfile rp = ResourceProfile.fromResourceSpec(rs, MemorySize.parse(50 + "m"));
 
-		assertEquals(1.0, rp.getCpuCores(), 0.000001);
+		assertValueEquals(1.0, rp.getCpuCores().getValue());
 		assertEquals(150, rp.getTotalMemory().getMebiBytes());
 		assertEquals(100, rp.getOperatorsMemory().getMebiBytes());
 
@@ -165,7 +166,7 @@ public class ResourceProfileTest {
 
 	@Test
 	public void testMergeWithOverflow() {
-		final double largeDouble = Double.MAX_VALUE - 1.0;
+		final CPUResource largeDouble = new CPUResource(Double.MAX_VALUE - 1.0);
 		final MemorySize largeMemory = MemorySize.MAX_VALUE.subtract(MemorySize.parse("100m"));
 
 		ResourceProfile rp1 = new ResourceProfile(3.0, 300, 300, 300, 300, 300, Collections.emptyMap());
