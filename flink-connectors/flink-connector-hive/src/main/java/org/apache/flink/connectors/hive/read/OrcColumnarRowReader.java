@@ -83,15 +83,16 @@ public class OrcColumnarRowReader extends OrcReader<BaseRow> {
 		// create and initialize the row batch
 		ColumnVector[] vectors = new ColumnVector[selectedFields.length];
 		for (int i = 0; i < vectors.length; i++) {
-			String name = fieldNames[i];
+			int index = selectedFields[i];
+			String name = fieldNames[index];
 			if (partitionKeys.contains(name)) {
-				DataType type = fieldTypes[i];
+				DataType type = fieldTypes[index];
 				AbstractHeapVector heapVector = AbstractHeapVector.createHeapColumn(
 						type.getLogicalType(), batchSize);
 				fill(heapVector, batchSize, type.getLogicalType(), partitionSpec.get(name));
 				vectors[i] = heapVector;
 			} else {
-				vectors[i] = AbstractOrcColumnVector.createVector(rowBatch.cols[i]);
+				vectors[i] = AbstractOrcColumnVector.createVector(rowBatch.cols[index]);
 			}
 		}
 		this.columnarBatch = new VectorizedColumnBatch(vectors);
