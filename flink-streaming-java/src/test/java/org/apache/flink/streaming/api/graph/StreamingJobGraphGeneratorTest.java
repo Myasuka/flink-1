@@ -275,8 +275,8 @@ public class StreamingJobGraphGeneratorTest extends TestLogger {
 		JobVertex sourceMapFilterVertex = jobGraph.getVerticesSortedTopologicallyFromSources().get(0);
 		JobVertex reduceSinkVertex = jobGraph.getVerticesSortedTopologicallyFromSources().get(1);
 
-		assertTrue(sourceMapFilterVertex.getMinResources().equals(resource3.merge(resource2).merge(resource1)));
-		assertTrue(reduceSinkVertex.getPreferredResources().equals(resource4.merge(resource5)));
+		assertTrue(sourceMapFilterVertex.getMinResources().hasSameResources(resource3.merge(resource2).merge(resource1)));
+		assertTrue(reduceSinkVertex.getPreferredResources().hasSameResources(resource4.merge(resource5)));
 	}
 
 	/**
@@ -341,15 +341,15 @@ public class StreamingJobGraphGeneratorTest extends TestLogger {
 
 		for (JobVertex jobVertex : jobGraph.getVertices()) {
 			if (jobVertex.getName().contains("test_source")) {
-				assertTrue(jobVertex.getMinResources().equals(resource1));
+				assertTrue(jobVertex.getMinResources().hasSameResources(resource1));
 			} else if (jobVertex.getName().contains("Iteration_Source")) {
-				assertTrue(jobVertex.getPreferredResources().equals(resource2));
+				assertTrue(jobVertex.getPreferredResources().hasSameResources(resource2));
 			} else if (jobVertex.getName().contains("test_flatMap")) {
-				assertTrue(jobVertex.getMinResources().equals(resource3.merge(resource4)));
+				assertTrue(jobVertex.getMinResources().hasSameResources(resource3.merge(resource4)));
 			} else if (jobVertex.getName().contains("Iteration_Tail")) {
 				assertTrue(jobVertex.getPreferredResources().equals(ResourceSpec.DEFAULT));
 			} else if (jobVertex.getName().contains("test_sink")) {
-				assertTrue(jobVertex.getMinResources().equals(resource5));
+				assertTrue(jobVertex.getMinResources().hasSameResources(resource5));
 			}
 		}
 	}
