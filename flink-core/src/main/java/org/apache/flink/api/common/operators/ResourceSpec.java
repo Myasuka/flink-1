@@ -19,6 +19,7 @@
 package org.apache.flink.api.common.operators;
 
 import org.apache.flink.annotation.Internal;
+import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.resources.GPUResource;
 import org.apache.flink.api.common.resources.Resource;
 import org.apache.flink.configuration.MemorySize;
@@ -63,8 +64,6 @@ public final class ResourceSpec implements Serializable {
 	 * Currently equal to {@link #UNKNOWN}.
 	 */
 	public static final ResourceSpec DEFAULT = UNKNOWN;
-
-	public static final String GPU_NAME = "GPU";
 
 	/** How many cpu cores are needed, use double so we can specify cpu like 0.1. */
 	private final double cpuCores;
@@ -170,14 +169,10 @@ public final class ResourceSpec implements Serializable {
 		return offHeapManagedMemory;
 	}
 
-	public double getGPUResource() {
+	@VisibleForTesting
+	public Resource getGPUResource() {
 		throwUnsupportedOperationExceptionIfUnknown();
-		Resource gpuResource = extendedResources.get(GPU_NAME);
-		if (gpuResource != null) {
-			return gpuResource.getValue();
-		}
-
-		return 0.0;
+		return extendedResources.get(GPUResource.NAME);
 	}
 
 	public Map<String, Resource> getExtendedResources() {
@@ -215,8 +210,8 @@ public final class ResourceSpec implements Serializable {
 		if (cmp1 <= 0 && cmp2 <= 0 && cmp3 <= 0 && cmp4 <= 0 && cmp5 <= 0) {
 			for (Resource resource : extendedResources.values()) {
 				if (!other.extendedResources.containsKey(resource.getName()) ||
-					other.extendedResources.get(resource.getName()).getResourceAggregateType() != resource.getResourceAggregateType() ||
-						other.extendedResources.get(resource.getName()).getValue() < resource.getValue()) {
+					other.extendedResources.get(resource.getName()).getValue().compareTo(resource.getValue()) < 0) {
+
 					return false;
 				}
 			}
