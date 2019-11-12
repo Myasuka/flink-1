@@ -301,12 +301,12 @@ public class ResourceProfile implements Serializable {
 			return true;
 		}
 
-		if (cpuCores.compareTo(required.getCpuCores()) >= 0 &&
-			taskHeapMemory.getBytes() >= required.taskHeapMemory.getBytes() &&
-			taskOffHeapMemory.getBytes() >= required.taskOffHeapMemory.getBytes() &&
-			onHeapManagedMemory.getBytes() >= required.onHeapManagedMemory.getBytes() &&
-			offHeapManagedMemory.getBytes() >= required.offHeapManagedMemory.getBytes() &&
-			shuffleMemory.getBytes() >= required.shuffleMemory.getBytes()) {
+		if (cpuCores.compareTo(required.cpuCores) >= 0 &&
+			taskHeapMemory.compareTo(required.taskHeapMemory) >= 0 &&
+			taskOffHeapMemory.compareTo(required.taskOffHeapMemory) >= 0 &&
+			onHeapManagedMemory.compareTo(required.onHeapManagedMemory) >= 0 &&
+			offHeapManagedMemory.compareTo(required.offHeapManagedMemory) >= 0 &&
+			shuffleMemory.compareTo(required.shuffleMemory) >= 0) {
 
 			for (Map.Entry<String, Resource> resource : required.extendedResources.entrySet()) {
 				if (!extendedResources.containsKey(resource.getKey()) ||
@@ -397,7 +397,7 @@ public class ResourceProfile implements Serializable {
 		});
 
 		return new ResourceProfile(
-			cpuCores.merge(other.getCpuCores()),
+			cpuCores.merge(other.cpuCores),
 			taskHeapMemory.add(other.taskHeapMemory),
 			taskOffHeapMemory.add(other.taskOffHeapMemory),
 			onHeapManagedMemory.add(other.onHeapManagedMemory),
@@ -435,7 +435,7 @@ public class ResourceProfile implements Serializable {
 		});
 
 		return new ResourceProfile(
-			cpuCores.subtract(other.getCpuCores()),
+			cpuCores.subtract(other.cpuCores),
 			taskHeapMemory.subtract(other.taskHeapMemory),
 			taskOffHeapMemory.subtract(other.taskOffHeapMemory),
 			onHeapManagedMemory.subtract(other.onHeapManagedMemory),
