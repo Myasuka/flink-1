@@ -80,6 +80,11 @@ public class TaskMailboxImpl implements TaskMailbox {
 	 */
 	private final Deque<Mail> batch = new ArrayDeque<>();
 
+	/**
+	 * Performance optimization where hasNewMail == !queue.isEmpty().
+	 */
+	private volatile boolean hasNewMail = false;
+
 	public TaskMailboxImpl(@Nonnull final Thread taskMailboxThread) {
 		this.taskMailboxThread = taskMailboxThread;
 	}
@@ -97,17 +102,7 @@ public class TaskMailboxImpl implements TaskMailbox {
 	@Override
 	public boolean hasMail() {
 		checkIsMailboxThread();
-		if (!batch.isEmpty()) {
-			return true;
-		}
-
-		final ReentrantLock lock = this.lock;
-		lock.lock();
-		try {
-			return !queue.isEmpty();
-		} finally {
-			lock.unlock();
-		}
+		return !batch.isEmpty() || hasNewMail;
 	}
 
 	@Override
@@ -126,7 +121,7 @@ public class TaskMailboxImpl implements TaskMailbox {
 	}
 
 	@Override
-	public @Nonnull Mail take(int priorty) throws InterruptedException, IllegalStateException {
+	public @Nonnull Mail take(int priority) throws InterruptedException, IllegalStateException {
 		Optional<Mail> head = tryTakeFromBatch();
 		if (head.isPresent()) {
 			return head.get();
@@ -135,7 +130,7 @@ public class TaskMailboxImpl implements TaskMailbox {
 		lock.lockInterruptibly();
 		try {
 			Mail headMail;
-			while ((headMail = takeOrNull(queue, priorty)) == null) {
+			while ((headMail = takeOrNull(queue, priority)) == null) {
 				notEmpty.await();
 			}
 			return headMail;
@@ -149,6 +144,9 @@ public class TaskMailboxImpl implements TaskMailbox {
 	@Override
 	public boolean createBatch() {
 		checkIsMailboxThread();
+		if (!hasNewMail) {
+			return !batch.isEmpty();
+		}
 		final ReentrantLock lock = this.lock;
 		lock.lock();
 		try {
@@ -156,6 +154,7 @@ public class TaskMailboxImpl implements TaskMailbox {
 			while ((mail = queue.pollFirst()) != null) {
 				batch.addLast(mail);
 			}
+			hasNewMail = false;
 			return !batch.isEmpty();
 		} finally {
 			lock.unlock();
@@ -165,7 +164,8 @@ public class TaskMailboxImpl implements TaskMailbox {
 	@Override
 	public Optional<Mail> tryTakeFromBatch() {
 		checkIsMailboxThread();
-		return Optional.ofNullable(takeOrNull(batch, MIN_PRIORITY));
+		checkTakeStateConditions();
+		return Optional.ofNullable(batch.pollFirst());
 	}
 
 	//------------------------------------------------------------------------------------------------------------------
@@ -177,6 +177,7 @@ public class TaskMailboxImpl implements TaskMailbox {
 		try {
 			checkPutStateConditions();
 			queue.addLast(mail);
+			hasNewMail = true;
 			notEmpty.signal();
 		} finally {
 			lock.unlock();
@@ -194,6 +195,7 @@ public class TaskMailboxImpl implements TaskMailbox {
 			try {
 				checkPutStateConditions();
 				queue.addFirst(mail);
+				hasNewMail = true;
 				notEmpty.signal();
 			} finally {
 				lock.unlock();
@@ -205,12 +207,16 @@ public class TaskMailboxImpl implements TaskMailbox {
 
 	@Nullable
 	private Mail takeOrNull(Deque<Mail> queue, int priority) {
-		checkTakeStateConditions();
+		if (queue.isEmpty()) {
+			return null;
+		}
+
 		Iterator<Mail> iterator = queue.iterator();
 		while (iterator.hasNext()) {
 			Mail mail = iterator.next();
 			if (mail.getPriority() >= priority) {
 				iterator.remove();
+				hasNewMail = !queue.isEmpty();
 				return mail;
 			}
 		}
@@ -226,6 +232,7 @@ public class TaskMailboxImpl implements TaskMailbox {
 		try {
 			drainedMails.addAll(queue);
 			queue.clear();
+			hasNewMail = false;
 			return drainedMails;
 		} finally {
 			lock.unlock();
@@ -240,16 +247,14 @@ public class TaskMailboxImpl implements TaskMailbox {
 	}
 
 	private void checkPutStateConditions() {
-		final State state = this.state;
-		if (this.state != OPEN) {
+		if (state != OPEN) {
 			throw new IllegalStateException("Mailbox is in state " + state + ", but is required to be in state " +
 				OPEN + " for put operations.");
 		}
 	}
 
 	private void checkTakeStateConditions() {
-		final State state = this.state;
-		if (this.state == CLOSED) {
+		if (state == CLOSED) {
 			throw new IllegalStateException("Mailbox is in state " + state + ", but is required to be in state " +
 				OPEN + " or " + QUIESCED + " for take operations.");
 		}
@@ -257,6 +262,7 @@ public class TaskMailboxImpl implements TaskMailbox {
 
 	@Override
 	public void quiesce() {
+		checkIsMailboxThread();
 		final ReentrantLock lock = this.lock;
 		lock.lock();
 		try {
@@ -271,6 +277,7 @@ public class TaskMailboxImpl implements TaskMailbox {
 	@Nonnull
 	@Override
 	public List<Mail> close() {
+		checkIsMailboxThread();
 		final ReentrantLock lock = this.lock;
 		lock.lock();
 		try {
