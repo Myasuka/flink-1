@@ -20,6 +20,7 @@ package org.apache.flink.runtime.executiongraph;
 
 import org.apache.flink.api.common.ExecutionConfig;
 import org.apache.flink.api.common.JobID;
+import org.apache.flink.api.common.operators.ResourceSpec;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.runtime.akka.AkkaUtils;
 import org.apache.flink.runtime.executiongraph.restart.NoRestartStrategy;
@@ -130,5 +131,31 @@ public class VertexSlotSharingTest {
 			e.printStackTrace();
 			fail(e.getMessage());
 		}
+	}
+
+	@Test
+	public void testSlotSharingGroupResources() {
+		final ResourceSpec resource1 = ResourceSpec.newBuilder(0.1, 100).build();
+		final ResourceSpec resource2 = ResourceSpec.newBuilder(0.2, 200).build();
+
+		final JobVertex v1 = new JobVertex("v1");
+		final JobVertex v2 = new JobVertex("v2");
+
+		v1.setResources(resource1, resource1);
+		v2.setResources(resource2, resource2);
+
+		final SlotSharingGroup group1 = new SlotSharingGroup();
+		final SlotSharingGroup group2 = new SlotSharingGroup();
+
+		v1.setSlotSharingGroup(group1);
+		assertTrue(group1.getResourceSpec().hasSameResources(resource1));
+
+		v2.setSlotSharingGroup(group1);
+		assertTrue(group1.getResourceSpec().hasSameResources(resource1.merge(resource2)));
+
+		// v1 is moved from group1 to group2
+		v1.setSlotSharingGroup(group2);
+		assertTrue(group2.getResourceSpec().hasSameResources(resource1));
+		assertTrue(group1.getResourceSpec().hasSameResources(resource2));
 	}
 }

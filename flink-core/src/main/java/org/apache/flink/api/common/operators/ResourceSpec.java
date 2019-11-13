@@ -150,6 +150,39 @@ public final class ResourceSpec implements Serializable {
 		return target;
 	}
 
+	/**
+	 * Subtracts another resource spec from this one.
+	 *
+	 * @param other The other resource spec to subtract.
+	 * @return The subtracted resource spec.
+	 */
+	public ResourceSpec subtract(final ResourceSpec other) {
+		checkNotNull(other, "Cannot subtract null resources");
+
+		if (this.equals(UNKNOWN) || other.equals(UNKNOWN)) {
+			return UNKNOWN;
+		}
+
+		checkArgument(other.lessThanOrEqual(this), "Cannot subtract a larger ResourceSpec from this one.");
+
+		final ResourceSpec target = new ResourceSpec(
+			this.cpuCores.subtract(other.cpuCores),
+			this.taskHeapMemory.subtract(other.taskHeapMemory),
+			this.taskOffHeapMemory.subtract(other.taskOffHeapMemory),
+			this.onHeapManagedMemory.subtract(other.onHeapManagedMemory),
+			this.offHeapManagedMemory.subtract(other.offHeapManagedMemory));
+
+		target.extendedResources.putAll(extendedResources);
+
+		for (Resource resource : other.extendedResources.values()) {
+			target.extendedResources.merge(resource.getName(), resource, (v1, v2) -> {
+				final Resource subtracted = v1.subtract(v2);
+				return subtracted.getValue().isZero() ? null : subtracted;
+			});
+		}
+		return target;
+	}
+
 	public Resource getCpuCores() {
 		throwUnsupportedOperationExceptionIfUnknown();
 		return this.cpuCores;
