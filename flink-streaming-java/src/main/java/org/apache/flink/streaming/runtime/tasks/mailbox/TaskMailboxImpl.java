@@ -107,9 +107,12 @@ public class TaskMailboxImpl implements TaskMailbox {
 
 	@Override
 	public Optional<Mail> tryTake(int priority) {
-		Optional<Mail> head = tryTakeFromBatch();
-		if (head.isPresent()) {
-			return head;
+		Mail head = takeOrNull(batch, priority);
+		if (head != null) {
+			return Optional.of(head);
+		}
+		if (!hasNewMail) {
+			return Optional.empty();
 		}
 		final ReentrantLock lock = this.lock;
 		lock.lock();
@@ -121,10 +124,11 @@ public class TaskMailboxImpl implements TaskMailbox {
 	}
 
 	@Override
-	public @Nonnull Mail take(int priority) throws InterruptedException, IllegalStateException {
-		Optional<Mail> head = tryTakeFromBatch();
-		if (head.isPresent()) {
-			return head.get();
+	public @Nonnull
+	Mail take(int priority) throws InterruptedException, IllegalStateException {
+		Mail head = takeOrNull(batch, priority);
+		if (head != null) {
+			return head;
 		}
 		final ReentrantLock lock = this.lock;
 		lock.lockInterruptibly();
