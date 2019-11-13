@@ -78,8 +78,8 @@ public class OrcColumnarRowReader extends OrcReader<BaseRow> {
 			int batchSize,
 			Path path,
 			long splitStart,
-			long splitEnd) throws IOException {
-		super(conf, schema, selectedFields, conjunctPredicates, batchSize, path, splitStart, splitEnd);
+			long splitLength) throws IOException {
+		super(conf, schema, selectedFields, conjunctPredicates, batchSize, path, splitStart, splitLength);
 		// create and initialize the row batch
 		ColumnVector[] vectors = new ColumnVector[selectedFields.length];
 		for (int i = 0; i < vectors.length; i++) {
