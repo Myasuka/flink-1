@@ -257,7 +257,7 @@ public class LocalExecutorITCase extends TestLogger {
 		expectedProperties.put("execution.restart-strategy.max-failures-per-interval", "10");
 		expectedProperties.put("execution.restart-strategy.failure-rate-interval", "99000");
 		expectedProperties.put("execution.restart-strategy.delay", "1000");
-		expectedProperties.put("table.optimizer.join-reorder-enabled", "false");
+		expectedProperties.put("table.optimizer.join-reorder-mode", "NONE");
 		expectedProperties.put("deployment.response-timeout", "5000");
 
 		assertEquals(expectedProperties, actualProperties);

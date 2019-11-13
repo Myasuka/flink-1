@@ -139,7 +139,7 @@ execution:
 # configuration:
 #   table.exec.spill-compression.enabled: true
 #   table.exec.spill-compression.block-size: 128kb
-#   table.optimizer.join-reorder-enabled: true
+#   table.optimizer.join-reorder-mode: COST_BASED
 
 #==============================================================================
 # Deployment properties
