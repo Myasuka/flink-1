@@ -30,6 +30,7 @@ import org.apache.flink.runtime.messages.webmonitor.JobDetails;
 import org.apache.flink.runtime.messages.webmonitor.MultipleJobsDetails;
 import org.apache.flink.runtime.rest.messages.JobsOverviewHeaders;
 import org.apache.flink.runtime.util.ExecutorThreadFactory;
+import org.apache.flink.runtime.util.ScheduledFutures;
 import org.apache.flink.util.FileUtils;
 
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.core.JsonFactory;
@@ -127,7 +128,9 @@ class HistoryServerArchiveFetcher {
 	}
 
 	void start() {
-		executor.scheduleWithFixedDelay(fetcherTask, 0, refreshIntervalMillis, TimeUnit.MILLISECONDS);
+		ScheduledFutures.withFatalExitUncaughtException(
+			executor.scheduleWithFixedDelay(
+				fetcherTask, 0, refreshIntervalMillis, TimeUnit.MILLISECONDS));
 	}
 
 	void stop() {
