@@ -268,9 +268,10 @@ public class ExecutionContextTest {
 			tableEnv.getConfig().getConfiguration().getString(
 				ExecutionConfigOptions.TABLE_EXEC_SPILL_COMPRESSION_BLOCK_SIZE));
 
-		assertTrue(
-			tableEnv.getConfig().getConfiguration().getBoolean(
-				OptimizerConfigOptions.TABLE_OPTIMIZER_JOIN_REORDER_ENABLED));
+		assertEquals(
+			"COST_BASED",
+			tableEnv.getConfig().getConfiguration().getString(
+				OptimizerConfigOptions.TABLE_OPTIMIZER_JOIN_REORDER_MODE));
 
 		// these options are not modified and should be equal to their default value
 		assertEquals(
