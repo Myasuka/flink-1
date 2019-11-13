@@ -35,11 +35,12 @@ import org.apache.calcite.plan.RelOptUtil
 import org.apache.calcite.rex._
 import org.apache.calcite.sql.fun.{SqlStdOperatorTable, SqlTrimFunction}
 import org.apache.calcite.sql.{SqlFunction, SqlPostfixOperator}
-import org.apache.calcite.util.Util
+import org.apache.calcite.util.{TimestampString, Util}
 import java.util.{TimeZone, List => JList}
 
 import org.apache.flink.table.dataformat.SqlTimestamp
 import org.apache.flink.table.functions.FunctionIdentifier
+import org.apache.flink.table.runtime.functions.SqlDateTimeUtils
 
 import scala.collection.JavaConversions._
 import scala.collection.JavaConverters._
@@ -335,8 +336,12 @@ class RexNodeToExpressionConverter(
         LocalTimeConverter.INSTANCE.toExternal(v)
 
       case TIMESTAMP_WITHOUT_TIME_ZONE =>
-        val v = literal.getValueAs(classOf[java.lang.Long])
-        LocalDateTimeConverter.INSTANCE.toExternal(SqlTimestamp.fromEpochMillis(v))
+        val timestampString = literal.getValueAs(classOf[TimestampString])
+        val millis = SqlDateTimeUtils.getMillisSinceEpoch(timestampString.toString)
+        val nanoOfMillis = SqlDateTimeUtils.getNanoOfMillisSinceEpoch(timestampString.toString)
+
+        LocalDateTimeConverter.INSTANCE.toExternal(
+          SqlTimestamp.fromEpochMillis(millis, nanoOfMillis))
 
       case TIMESTAMP_WITH_LOCAL_TIME_ZONE =>
         val v = literal.getValueAs(classOf[java.lang.Long])
