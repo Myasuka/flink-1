@@ -42,12 +42,12 @@ public class TaskExecutorPartitionTrackerImpl extends AbstractPartitionTracker<J
 	}
 
 	@Override
-	public void startTrackingPartition(JobID producingJobId, ResultPartitionID resultPartitionId, IntermediateDataSetID intermediateDataSetId) {
+	public void startTrackingPartition(JobID producingJobId, ResultPartitionID resultPartitionId, IntermediateDataSetID intermediateDataSetId, int numberOfPartitions) {
 		Preconditions.checkNotNull(producingJobId);
 		Preconditions.checkNotNull(resultPartitionId);
 		Preconditions.checkNotNull(intermediateDataSetId);
 
-		startTrackingPartition(producingJobId, resultPartitionId, new TaskExecutorPartitionInfo(intermediateDataSetId));
+		startTrackingPartition(producingJobId, resultPartitionId, new TaskExecutorPartitionInfo(intermediateDataSetId, numberOfPartitions));
 	}
 
 	@Override

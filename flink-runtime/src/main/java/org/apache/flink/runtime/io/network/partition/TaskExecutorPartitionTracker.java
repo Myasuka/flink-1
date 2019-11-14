@@ -33,7 +33,7 @@ public interface TaskExecutorPartitionTracker extends PartitionTracker<JobID, Ta
 	 * @param producingJobId ID of job by which the partition is produced
 	 * @param intermediateDataSetId the corresponding dataset ID
 	 */
-	void startTrackingPartition(JobID producingJobId, ResultPartitionID resultPartitionId, IntermediateDataSetID intermediateDataSetId);
+	void startTrackingPartition(JobID producingJobId, ResultPartitionID resultPartitionId, IntermediateDataSetID intermediateDataSetId, int numberOfPartitions);
 
 	/**
 	 * Releases the given partitions and stop the tracking of partitions that were released.

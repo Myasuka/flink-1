@@ -28,12 +28,19 @@ public final class TaskExecutorPartitionInfo {
 
 	private final IntermediateDataSetID intermediateDataSetId;
 
-	public TaskExecutorPartitionInfo(IntermediateDataSetID intermediateDataSetId) {
+	private final int numberOfPartitions;
+
+	public TaskExecutorPartitionInfo(IntermediateDataSetID intermediateDataSetId, int numberOfPartitions) {
 		this.intermediateDataSetId = intermediateDataSetId;
+		this.numberOfPartitions = numberOfPartitions;
 	}
 
 	public IntermediateDataSetID getIntermediateDataSetId() {
 		return intermediateDataSetId;
+	}
+
+	public int getNumberOfPartitions() {
+		return numberOfPartitions;
 	}
 
 	@Override

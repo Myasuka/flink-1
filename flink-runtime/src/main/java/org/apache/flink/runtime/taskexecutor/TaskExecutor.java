@@ -625,7 +625,7 @@ public class TaskExecutor extends RpcEndpoint implements TaskExecutorGateway {
 			Collection<ResultPartitionDeploymentDescriptor> producedResultPartitions,
 			CompletableFuture<ExecutionState> terminationFuture) {
 		final Set<ResultPartitionID> partitionsRequiringRelease = filterPartitionsRequiringRelease(producedResultPartitions)
-			.peek(rpdd -> partitionTracker.startTrackingPartition(jobId, rpdd.getShuffleDescriptor().getResultPartitionID(), rpdd.getResultId()))
+			.peek(rpdd -> partitionTracker.startTrackingPartition(jobId, rpdd.getShuffleDescriptor().getResultPartitionID(), rpdd.getResultId(), rpdd.getNumberOfPartitions()))
 			.map(ResultPartitionDeploymentDescriptor::getShuffleDescriptor)
 			.map(ShuffleDescriptor::getResultPartitionID)
 			.collect(Collectors.toSet());
