@@ -120,7 +120,7 @@ public class ResourceSpecTest extends TestLogger {
 		ResourceSpec rs2 = ResourceSpec.newBuilder(1.0, 100).build();
 
 		ResourceSpec rs3 = rs1.merge(rs2);
-		assertEquals(2.0, rs3.getCpuCores(), 0.000001);
+		assertEquals(2.0, rs3.getCpuCores().getDoubleValue(), 0.000001);
 		assertEquals(200, rs3.getTaskHeapMemory().getMebiBytes());
 		assertEquals(1.1, rs3.getGPUResource().getDoubleValue(), 0.000001);
 
