@@ -30,13 +30,7 @@ import org.apache.flink.table.api.TableSchema;
 import org.apache.flink.table.api.ValidationException;
 import org.apache.flink.table.calcite.FlinkPlannerImpl;
 import org.apache.flink.table.calcite.FlinkTypeFactory;
-import org.apache.flink.table.catalog.CatalogFunction;
-import org.apache.flink.table.catalog.CatalogFunctionImpl;
-import org.apache.flink.table.catalog.CatalogManager;
-import org.apache.flink.table.catalog.CatalogTable;
-import org.apache.flink.table.catalog.CatalogTableImpl;
-import org.apache.flink.table.catalog.ObjectIdentifier;
-import org.apache.flink.table.catalog.UnresolvedIdentifier;
+import org.apache.flink.table.catalog.*;
 import org.apache.flink.table.operations.CatalogSinkModifyOperation;
 import org.apache.flink.table.operations.Operation;
 import org.apache.flink.table.operations.PlannerQueryOperation;
@@ -179,6 +173,7 @@ public class SqlToOperationConverter {
 		CatalogFunction catalogFunction =
 			new CatalogFunctionImpl(
 				sqlCreateFunction.getFunctionClassName().toValue(),
+				Language.valueOf(sqlCreateFunction.getFunctionLanguage().toValue()),
 				new HashMap<String, String>());
 		return new CreateFunctionOperation(
 			identifier,
@@ -190,7 +185,10 @@ public class SqlToOperationConverter {
 	private Operation convertDropFunction(SqlDropFunction sqlDropFunction) {
 		UnresolvedIdentifier unresolvedIdentifier = UnresolvedIdentifier.of(sqlDropFunction.fullFunctionName());
 		ObjectIdentifier identifier = catalogManager.qualifyIdentifier(unresolvedIdentifier);
-		return  new DropFunctionOperation(identifier, sqlDropFunction.getIfExists());
+		return  new DropFunctionOperation(
+			identifier,
+			Language.valueOf(sqlDropFunction.getFunctionLanguage().toValue()),
+			sqlDropFunction.getIfExists());
 	}
 
 	/** Fallback method for sql query. */

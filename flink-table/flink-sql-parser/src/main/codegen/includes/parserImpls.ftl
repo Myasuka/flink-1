@@ -356,9 +356,17 @@ SqlCreate SqlCreateFunction(Span s, boolean replace) :
 {
     SqlIdentifier functionName = null;
     SqlCharStringLiteral functionClassName = null;
+    SqlCharStringLiteral functionLanguage = null;
     boolean ifNotExists = false;
+    boolean isSystemFunction = false;
+
 }
 {
+    (
+        <TEMPORARY>  { isSystemFunction = false; }
+    |
+        <TEMPORARY> <SYSTEM>   {isSystemFunction = true; }
+    )
     <FUNCTION>
     (
         <IF> <NOT> <EXISTS> { ifNotExists = true; }
@@ -370,8 +378,12 @@ SqlCreate SqlCreateFunction(Span s, boolean replace) :
         String p = SqlParserUtil.parseString(token.image);
         functionClassName = SqlLiteral.createCharString(p, getPos());
     }]
+    [ <LANGUAGE> <QUOTED_STRING> {
+        String lang = SqlParserUtil.parseString(token.image);
+        functionLanguage = SqlLiteral.createCharString(lang, getPos());
+    }]
     {
-        return new SqlCreateFunction(s.pos(), functionName, functionClassName, ifNotExists);
+        return new SqlCreateFunction(s.pos(), functionName, functionClassName, functionLanguage, ifNotExists, isSystemFunction);
     }
 }
 
@@ -436,7 +448,9 @@ SqlCreate SqlCreateTable(Span s, boolean replace) :
 SqlDrop SqlDropTable(Span s, boolean replace) :
 {
     SqlIdentifier tableName = null;
+    SqlCharStringLiteral functionLanguage = null;
     boolean ifExists = false;
+    boolean isSystemFunction = false;
 }
 {
     <TABLE>
@@ -458,8 +472,14 @@ SqlDrop SqlDropFunction(Span s, boolean replace) :
 {
     SqlIdentifier functionName = null;
     boolean ifExists = false;
+
 }
 {
+    (
+        <TEMPORARY>  { isSystemFunction = false; }
+    |
+        <TEMPORARY> <SYSTEM>   {isSystemFunction = true; }
+    )
     <FUNCTION>
 
     (
@@ -470,8 +490,12 @@ SqlDrop SqlDropFunction(Span s, boolean replace) :
 
     functionName = CompoundIdentifier()
 
+    [ <LANGUAGE> <QUOTED_STRING> {
+        String lang = SqlParserUtil.parseString(token.image);
+        functionLanguage = SqlLiteral.createCharString(lang, getPos());
+    }]
     {
-        return new SqlDropFunction(s.pos(), functionName, ifExists);
+        return new SqlDropFunction(s.pos(), functionName, functionLanguage, ifExists, isSystemFunction);
     }
 }
 
