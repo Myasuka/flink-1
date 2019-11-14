@@ -427,6 +427,7 @@ public class SqlToOperationConverterTest {
 			columnExpressions);
 	}
 
+	@Test
 	public void testCreateFunction() {
 		final String sql = "CREATE FUNCTION func1 AS 'org.apache.flink.function.function1'";
 		final FlinkPlannerImpl planner = getPlannerBySqlDialect(SqlDialect.DEFAULT);

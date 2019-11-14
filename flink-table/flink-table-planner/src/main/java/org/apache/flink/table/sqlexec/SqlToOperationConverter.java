@@ -30,7 +30,14 @@ import org.apache.flink.table.api.TableSchema;
 import org.apache.flink.table.api.ValidationException;
 import org.apache.flink.table.calcite.FlinkPlannerImpl;
 import org.apache.flink.table.calcite.FlinkTypeFactory;
-import org.apache.flink.table.catalog.*;
+import org.apache.flink.table.catalog.CatalogFunction;
+import org.apache.flink.table.catalog.CatalogFunctionImpl;
+import org.apache.flink.table.catalog.CatalogManager;
+import org.apache.flink.table.catalog.CatalogTable;
+import org.apache.flink.table.catalog.CatalogTableImpl;
+import org.apache.flink.table.catalog.Language;
+import org.apache.flink.table.catalog.ObjectIdentifier;
+import org.apache.flink.table.catalog.UnresolvedIdentifier;
 import org.apache.flink.table.operations.CatalogSinkModifyOperation;
 import org.apache.flink.table.operations.Operation;
 import org.apache.flink.table.operations.PlannerQueryOperation;
@@ -170,11 +177,14 @@ public class SqlToOperationConverter {
 	private Operation convertCreateFunction(SqlCreateFunction sqlCreateFunction) {
 		UnresolvedIdentifier unresolvedIdentifier = UnresolvedIdentifier.of(sqlCreateFunction.fullFunctionName());
 		ObjectIdentifier identifier = catalogManager.qualifyIdentifier(unresolvedIdentifier);
+		Language language = sqlCreateFunction.getFunctionLanguage() == null
+			? Language.JAVA : Language.valueOf(sqlCreateFunction.getFunctionLanguage().toValue());
 		CatalogFunction catalogFunction =
 			new CatalogFunctionImpl(
 				sqlCreateFunction.getFunctionClassName().toValue(),
-				Language.valueOf(sqlCreateFunction.getFunctionLanguage().toValue()),
-				new HashMap<String, String>());
+				language,
+				new HashMap<String, String>(),
+				sqlCreateFunction.isSystemFunction());
 		return new CreateFunctionOperation(
 			identifier,
 			catalogFunction,
@@ -185,9 +195,11 @@ public class SqlToOperationConverter {
 	private Operation convertDropFunction(SqlDropFunction sqlDropFunction) {
 		UnresolvedIdentifier unresolvedIdentifier = UnresolvedIdentifier.of(sqlDropFunction.fullFunctionName());
 		ObjectIdentifier identifier = catalogManager.qualifyIdentifier(unresolvedIdentifier);
+		Language language = sqlDropFunction.getFunctionLanguage() == null
+			? Language.JAVA : Language.valueOf(sqlDropFunction.getFunctionLanguage().toValue());
 		return  new DropFunctionOperation(
 			identifier,
-			Language.valueOf(sqlDropFunction.getFunctionLanguage().toValue()),
+			language,
 			sqlDropFunction.getIfExists());
 	}
 

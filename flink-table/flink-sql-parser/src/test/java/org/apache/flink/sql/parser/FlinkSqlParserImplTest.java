@@ -469,39 +469,63 @@ public class FlinkSqlParserImplTest extends SqlParserTest {
 	}
 
 	@Test
-	public void testCreateFunction() {
-		String sql = "CREATE FUNCTION catalog1.db1.function1 AS 'org.apache.fink.function.function1'";
-		check(sql, "CREATE FUNCTION `CATALOG1`.`DB1`.`FUNCTION1` AS 'org.apache.fink.function.function1'");
+	public void testCreateTemporaryFunction() {
+		String sql = "CREATE TEMPORARY FUNCTION catalog1.db1.function1 AS 'org.apache.fink.function.function1'";
+		check(sql, "CREATE TEMPORARY FUNCTION `CATALOG1`.`DB1`.`FUNCTION1` AS 'org.apache.fink.function.function1'");
+	}
+
+	@Test
+	public void testCreateTemporarySystemFunction() {
+		String sql = "CREATE TEMPORARY SYSTEM FUNCTION catalog1.db1.function1 AS 'org.apache.fink.function.function1'";
+		check(sql, "CREATE TEMPORARY SYSTEM FUNCTION `CATALOG1`.`DB1`.`FUNCTION1` AS 'org.apache.fink.function.function1'");
 	}
 
 	@Test
 	public void testCreateFunctionWithoutCatalog() {
-		String sql = "CREATE FUNCTION db1.function1 AS 'org.apache.fink.function.function1'";
-		check(sql, "CREATE FUNCTION `DB1`.`FUNCTION1` AS 'org.apache.fink.function.function1'");
+		String sql = "CREATE TEMPORARY FUNCTION db1.function1 AS 'org.apache.fink.function.function1'";
+		check(sql, "CREATE TEMPORARY FUNCTION `DB1`.`FUNCTION1` AS 'org.apache.fink.function.function1'");
 	}
 
 	@Test
 	public void testCreateFunctionWithOnlyName() {
-		String sql = "CREATE FUNCTION function1 AS 'org.apache.fink.function.function1'";
-		check(sql, "CREATE FUNCTION `FUNCTION1` AS 'org.apache.fink.function.function1'");
+		String sql = "CREATE TEMPORARY FUNCTION function1 AS 'org.apache.fink.function.function1'";
+		check(sql, "CREATE TEMPORARY FUNCTION `FUNCTION1` AS 'org.apache.fink.function.function1'");
 	}
 
 	@Test
 	public void testCreateFunctionIfNotExist() {
-		String sql = "CREATE FUNCTION IF NOT EXISTS catalog1.db1.function1 AS 'org.apache.fink.function.function1'";
-		check(sql, "CREATE FUNCTION IF NOT EXISTS `CATALOG1`.`DB1`.`FUNCTION1` AS 'org.apache.fink.function.function1'");
+		String sql = "CREATE TEMPORARY FUNCTION IF NOT EXISTS catalog1.db1.function1 AS 'org.apache.fink.function.function1'";
+		check(sql, "CREATE TEMPORARY FUNCTION IF NOT EXISTS `CATALOG1`.`DB1`.`FUNCTION1` AS 'org.apache.fink.function.function1'");
 	}
 
 	@Test
-	public void testDropFunction() {
-		String sql = "DROP FUNCTION catalog1.db1.function1";
-		check(sql, "DROP FUNCTION `CATALOG1`.`DB1`.`FUNCTION1`");
+	public void testCreateFunctionWithLanguage() {
+		String sql = "CREATE TEMPORARY FUNCTION function1 AS 'org.apache.fink.function.function1' LANGUAGE 'JAVA'";
+		check(sql, "CREATE TEMPORARY FUNCTION `FUNCTION1` AS 'org.apache.fink.function.function1' LANGUAGE 'JAVA'");
+	}
+
+	@Test
+	public void testDropTemporaryFunction() {
+		String sql = "DROP TEMPORARY FUNCTION catalog1.db1.function1";
+		check(sql, "DROP TEMPORARY FUNCTION `CATALOG1`.`DB1`.`FUNCTION1`");
+	}
+
+	@Test
+	public void testDropTemporarySystemFunction() {
+		String sql = "DROP TEMPORARY SYSTEM FUNCTION catalog1.db1.function1";
+		check(sql, "DROP TEMPORARY SYSTEM FUNCTION `CATALOG1`.`DB1`.`FUNCTION1`");
 	}
 
 	@Test
 	public void testDropFunctionIfExists() {
-		String sql = "DROP FUNCTION IF EXISTS catalog1.db1.function1";
-		check(sql, "DROP FUNCTION IF EXISTS `CATALOG1`.`DB1`.`FUNCTION1`");
+		String sql = "DROP TEMPORARY FUNCTION IF EXISTS catalog1.db1.function1";
+		check(sql, "DROP TEMPORARY FUNCTION IF EXISTS `CATALOG1`.`DB1`.`FUNCTION1`");
+	}
+
+	@Test
+	public void testDropFunctionWithLanguage() {
+		String sql = "DROP TEMPORARY FUNCTION IF EXISTS catalog1.db1.function1 LANGUAGE 'JAVA'";
+		check(sql, "DROP TEMPORARY FUNCTION IF EXISTS `CATALOG1`.`DB1`.`FUNCTION1` LANGUAGE 'JAVA'");
 	}
 
 	@Test

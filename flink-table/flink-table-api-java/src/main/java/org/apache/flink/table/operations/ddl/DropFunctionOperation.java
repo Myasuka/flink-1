@@ -64,4 +64,8 @@ public class DropFunctionOperation implements DropOperation {
 			Collections.emptyList(),
 			Operation::asSummaryString);
 	}
+
+	public Language getLanguage() {
+		return language;
+	}
 }
