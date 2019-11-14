@@ -362,10 +362,11 @@ SqlCreate SqlCreateFunction(Span s, boolean replace) :
 
 }
 {
+    <TEMPORARY>
     (
-        <TEMPORARY>  { isSystemFunction = false; }
+        <SYSTEM>   { isSystemFunction = true; }
     |
-        <TEMPORARY> <SYSTEM>   {isSystemFunction = true; }
+        {isSystemFunction = false; }
     )
     <FUNCTION>
     (
@@ -448,9 +449,7 @@ SqlCreate SqlCreateTable(Span s, boolean replace) :
 SqlDrop SqlDropTable(Span s, boolean replace) :
 {
     SqlIdentifier tableName = null;
-    SqlCharStringLiteral functionLanguage = null;
     boolean ifExists = false;
-    boolean isSystemFunction = false;
 }
 {
     <TABLE>
@@ -471,14 +470,17 @@ SqlDrop SqlDropTable(Span s, boolean replace) :
 SqlDrop SqlDropFunction(Span s, boolean replace) :
 {
     SqlIdentifier functionName = null;
+    SqlCharStringLiteral functionLanguage = null;
     boolean ifExists = false;
+    boolean isSystemFunction = false;
 
 }
 {
+    <TEMPORARY>
     (
-        <TEMPORARY>  { isSystemFunction = false; }
+        <SYSTEM>  { isSystemFunction = true; }
     |
-        <TEMPORARY> <SYSTEM>   {isSystemFunction = true; }
+        {isSystemFunction = false; }
     )
     <FUNCTION>
 

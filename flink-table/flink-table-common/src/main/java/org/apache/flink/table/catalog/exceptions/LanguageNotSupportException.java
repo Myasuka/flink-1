@@ -16,18 +16,20 @@
  * limitations under the License.
  */
 
-package org.apache.flink.table.catalog;
-
-import org.junit.Assert;
-import org.junit.Test;
+package org.apache.flink.table.catalog.exceptions;
 
 /**
- * Test Language enum.
+ * Exception for trying to define function with a not supported language string.
  */
-public class LanguageTest {
+public class LanguageNotSupportException extends Exception {
 
-	@Test
-	public void testConversion() {
-		Assert.assertEquals(Language.valueOf("JAVA"), Language.JAVA);
+	private static final String MSG = "Language %s is not supported in flink runtime.";
+
+	public LanguageNotSupportException(String language) {
+		this(language, null);
+	}
+
+	public LanguageNotSupportException(String language, Throwable cause) {
+		super(String.format(MSG, language), cause);
 	}
 }
