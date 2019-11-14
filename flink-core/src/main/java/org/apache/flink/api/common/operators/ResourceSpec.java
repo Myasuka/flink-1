@@ -170,14 +170,9 @@ public final class ResourceSpec implements Serializable {
 		return offHeapManagedMemory;
 	}
 
-	public double getGPUResource() {
+	public Resource getGPUResource() {
 		throwUnsupportedOperationExceptionIfUnknown();
-		Resource gpuResource = extendedResources.get(GPU_NAME);
-		if (gpuResource != null) {
-			return gpuResource.getValue();
-		}
-
-		return 0.0;
+		return extendedResources.get(GPU_NAME);
 	}
 
 	public Map<String, Resource> getExtendedResources() {
@@ -215,7 +210,7 @@ public final class ResourceSpec implements Serializable {
 		if (cmp1 <= 0 && cmp2 <= 0 && cmp3 <= 0 && cmp4 <= 0 && cmp5 <= 0) {
 			for (Resource resource : extendedResources.values()) {
 				if (!other.extendedResources.containsKey(resource.getName()) ||
-					other.extendedResources.get(resource.getName()).getValue() < resource.getValue()) {
+					other.extendedResources.get(resource.getName()).getValue().compareTo(resource.getValue()) < 0) {
 					return false;
 				}
 			}
