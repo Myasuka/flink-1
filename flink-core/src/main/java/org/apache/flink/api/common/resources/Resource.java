@@ -21,6 +21,7 @@ package org.apache.flink.api.common.resources;
 import org.apache.flink.annotation.Internal;
 
 import java.io.Serializable;
+import java.math.BigDecimal;
 
 import static org.apache.flink.util.Preconditions.checkArgument;
 import static org.apache.flink.util.Preconditions.checkNotNull;
@@ -35,11 +36,15 @@ public abstract class Resource implements Serializable {
 
 	private final String name;
 
-	private final double value;
+	private final BigDecimal value;
 
 	protected Resource(String name, double value) {
+		this(name, BigDecimal.valueOf(value));
+	}
+
+	protected Resource(String name, BigDecimal value) {
 		this.name = checkNotNull(name);
-		this.value = value;
+		this.value = checkNotNull(value);
 	}
 
 	public Resource merge(Resource other) {
@@ -47,16 +52,16 @@ public abstract class Resource implements Serializable {
 		checkArgument(getClass() == other.getClass(), "Merge with different resource type");
 		checkArgument(name.equals(other.name), "Merge with different resource name");
 
-		return create(value + other.value);
+		return create(value.add(other.value));
 	}
 
 	public Resource subtract(Resource other) {
 		checkNotNull(other, "Cannot subtract null resources");
 		checkArgument(getClass() == other.getClass(), "Minus with different resource type");
 		checkArgument(name.equals(other.name), "Minus with different resource name");
-		checkArgument(value >= other.value, "Try to subtract a larger resource from this one.");
+		checkArgument(value.compareTo(other.value) >= 0, "Try to subtract a larger resource from this one.");
 
-		return create(value - other.value);
+		return create(value.subtract(other.value));
 	}
 
 	@Override
@@ -66,7 +71,7 @@ public abstract class Resource implements Serializable {
 		} else if (o != null && getClass() == o.getClass()) {
 			Resource other = (Resource) o;
 
-			return name.equals(other.name) && value == other.value;
+			return name.equals(other.name) && value.equals(other.value);
 		} else {
 			return false;
 		}
@@ -75,16 +80,25 @@ public abstract class Resource implements Serializable {
 	@Override
 	public int hashCode() {
 		int result = name.hashCode();
-		result = 31 * result + (int) value;
+		result = 31 * result + value.hashCode();
 		return result;
+	}
+
+	@Override
+	public String toString() {
+		return String.format("Resource(%s: %s)", name, value);
 	}
 
 	public String getName() {
 		return name;
 	}
 
-	public double getValue() {
+	public BigDecimal getValue() {
 		return value;
+	}
+
+	public double getDoubleValue() {
+		return value.doubleValue();
 	}
 
 	/**
@@ -93,5 +107,5 @@ public abstract class Resource implements Serializable {
 	 * @param value The value of the resource
 	 * @return A new instance of the sub resource
 	 */
-	protected abstract Resource create(double value);
+	protected abstract Resource create(BigDecimal value);
 }
