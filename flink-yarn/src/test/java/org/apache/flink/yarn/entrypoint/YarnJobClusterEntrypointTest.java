@@ -37,7 +37,7 @@ public class YarnJobClusterEntrypointTest {
 	public void testCreateDispatcherResourceManagerComponentFactoryFailIfUsrLibDirDoesNotExist(){
 		final Configuration configuration = new Configuration();
 		configuration.setString(YarnConfigOptions.CLASSPATH_INCLUDE_USER_JAR, YarnConfigOptions.UserJarInclusion.DISABLED.toString());
-		final YarnJobClusterEntrypoint yarnJobClusterEntrypoint = new YarnJobClusterEntrypoint(configuration, FileUtils.getCurrentWorkingDirectory().getClass().toString());
+		final YarnJobClusterEntrypoint yarnJobClusterEntrypoint = new YarnJobClusterEntrypoint(configuration, FileUtils.getCurrentWorkingDirectory().toString());
 		try {
 			yarnJobClusterEntrypoint.createDispatcherResourceManagerComponentFactory(configuration);
 			fail();
