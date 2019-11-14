@@ -18,32 +18,18 @@
 
 package org.apache.flink.table.catalog;
 
-import java.util.HashMap;
-import java.util.Map;
-
 /**
- * Supported languages for UDF definition in function DDL
+ * Supported languages for UDF definition in function DDL.
  */
 public enum Language {
 	JAVA("java"),
 	SCALA("scala"),
 	PYTHON("python");
 
-	private static Map<String, Language> LANGUAGE_MAP = new HashMap<>();
-	static {
-		LANGUAGE_MAP.put(JAVA.getName(), JAVA);
-		LANGUAGE_MAP.put(SCALA.getName(), SCALA);
-		LANGUAGE_MAP.put(PYTHON.getName(), PYTHON);
-	}
-
 	private String name;
 
 	Language(String name) {
 		this.name = name;
-	}
-
-	public static Language nameOf(String name) {
-		return LANGUAGE_MAP.get(name);
 	}
 
 	public String getName() {

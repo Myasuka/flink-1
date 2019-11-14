@@ -18,6 +18,9 @@
 
 package org.apache.flink.sql.parser.ddl;
 
+import org.apache.flink.sql.parser.ExtendedSqlNode;
+import org.apache.flink.sql.parser.error.SqlValidateException;
+
 import org.apache.calcite.sql.SqlCharStringLiteral;
 import org.apache.calcite.sql.SqlCreate;
 import org.apache.calcite.sql.SqlIdentifier;
@@ -26,9 +29,6 @@ import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.SqlOperator;
 import org.apache.calcite.sql.SqlSpecialOperator;
 import org.apache.calcite.sql.SqlWriter;
-import org.apache.flink.sql.parser.ExtendedSqlNode;
-import org.apache.flink.sql.parser.error.SqlValidateException;
-
 import org.apache.calcite.sql.parser.SqlParserPos;
 import org.apache.calcite.util.ImmutableNullableList;
 
@@ -62,6 +62,7 @@ public class SqlCreateFunction extends SqlCreate implements ExtendedSqlNode {
 		this.isSystemFunction = requireNonNull(isSystemFunction);
 		this.functionLanguage = functionLanguage;
 	}
+
 	@Override
 	public SqlOperator getOperator() {
 		return OPERATOR;

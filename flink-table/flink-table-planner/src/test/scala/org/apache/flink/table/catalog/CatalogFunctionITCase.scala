@@ -62,13 +62,13 @@ class CatalogFunctionITCase(isStreaming: Boolean) {
   def testCreateFunction(): Unit = {
     val ddl1 =
       """
-        |create function f1
+        |create temporary function f1
         |  as 'org.apache.flink.function.TestFunction'
       """.stripMargin
     tableEnv.sqlUpdate(ddl1)
     assert(tableEnv.listFunctions().contains("f1"))
 
-    tableEnv.sqlUpdate("DROP FUNCTION IF EXISTS catalog1.database1.f1")
+    tableEnv.sqlUpdate("DROP TEMPORARY FUNCTION IF EXISTS catalog1.database1.f1")
     assert(tableEnv.listFunctions().contains("f1"))
   }
 
@@ -76,13 +76,13 @@ class CatalogFunctionITCase(isStreaming: Boolean) {
   def testCreateFunctionWithFullPath(): Unit = {
     val ddl2 =
       """
-        |create function default_catalog.default_database.f2
+        |create temporary function default_catalog.default_database.f2
         |  as 'org.apache.flink.function.TestFunction'
       """.stripMargin
     tableEnv.sqlUpdate(ddl2)
     assert(tableEnv.listFunctions().contains("f2"))
 
-    tableEnv.sqlUpdate("DROP FUNCTION IF EXISTS default_catalog.default_database.f2")
+    tableEnv.sqlUpdate("DROP TEMPORARY FUNCTION IF EXISTS default_catalog.default_database.f2")
     assert(!tableEnv.listFunctions().contains("f2"))
   }
 
@@ -90,14 +90,14 @@ class CatalogFunctionITCase(isStreaming: Boolean) {
   def testCreateFunctionNotExists(): Unit = {
     val ddl3 =
     """
-      |create function if not exists catalog1.database1.f3
+      |create temporary function if not exists catalog1.database1.f3
       |  as 'org.apache.flink.function.TestFunction'
     """.stripMargin
     tableEnv.sqlUpdate(ddl3)
 
     val ddl4 =
       """
-        |create function catalog1.database1.f3
+        |create temporary function catalog1.database1.f3
         |  as 'org.apache.flink.function.TestFunction'
     """.stripMargin
 
@@ -112,10 +112,10 @@ class CatalogFunctionITCase(isStreaming: Boolean) {
 
   @Test
   def testDropFunctionNonExists(): Unit = {
-    tableEnv.sqlUpdate("DROP FUNCTION IF EXISTS catalog1.database1.f4")
+    tableEnv.sqlUpdate("DROP TEMPORARY FUNCTION IF EXISTS catalog1.database1.f4")
 
     try {
-      tableEnv.sqlUpdate("DROP FUNCTION catalog1.database1.f4")
+      tableEnv.sqlUpdate("DROP TEMPORARY FUNCTION catalog1.database1.f4")
     } catch {
       case e: Exception => {
         assertThat(e.getMessage(), containsString("Catalog catalog1 does not exist."));
