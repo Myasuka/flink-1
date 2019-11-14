@@ -34,6 +34,11 @@ public interface CatalogFunction {
 	String getClassName();
 
 	/**
+	 * Get the function language
+	 */
+	Language getLanguage();
+
+	/**
 	 * Get the properties of the function.
 	 *
 	 * @return the properties of the function

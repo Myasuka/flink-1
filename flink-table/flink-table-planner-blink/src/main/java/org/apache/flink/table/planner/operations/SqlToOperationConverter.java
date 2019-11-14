@@ -27,13 +27,7 @@ import org.apache.flink.sql.parser.ddl.SqlTableOption;
 import org.apache.flink.sql.parser.dml.RichSqlInsert;
 import org.apache.flink.table.api.TableException;
 import org.apache.flink.table.api.TableSchema;
-import org.apache.flink.table.catalog.CatalogFunction;
-import org.apache.flink.table.catalog.CatalogFunctionImpl;
-import org.apache.flink.table.catalog.CatalogManager;
-import org.apache.flink.table.catalog.CatalogTable;
-import org.apache.flink.table.catalog.CatalogTableImpl;
-import org.apache.flink.table.catalog.ObjectIdentifier;
-import org.apache.flink.table.catalog.UnresolvedIdentifier;
+import org.apache.flink.table.catalog.*;
 import org.apache.flink.table.operations.CatalogSinkModifyOperation;
 import org.apache.flink.table.operations.Operation;
 import org.apache.flink.table.operations.ddl.CreateFunctionOperation;
@@ -173,6 +167,7 @@ public class SqlToOperationConverter {
 		CatalogFunction catalogFunction =
 			new CatalogFunctionImpl(
 				sqlCreateFunction.getFunctionClassName().toValue(),
+				Language.valueOf(sqlCreateFunction.getFunctionLanguage().toValue()),
 				new HashMap<String, String>());
 		return new CreateFunctionOperation(
 			identifier,
@@ -184,7 +179,10 @@ public class SqlToOperationConverter {
 	private Operation convertDropFunction(SqlDropFunction sqlDropFunction) {
 		UnresolvedIdentifier unresolvedIdentifier = UnresolvedIdentifier.of(sqlDropFunction.fullFunctionName());
 		ObjectIdentifier identifier = catalogManager.qualifyIdentifier(unresolvedIdentifier);
-		return  new DropFunctionOperation(identifier, sqlDropFunction.getIfExists());
+		return  new DropFunctionOperation(
+			identifier,
+			Language.valueOf(sqlDropFunction.getFunctionLanguage().toValue()),
+			sqlDropFunction.getIfExists());
 	}
 
 	/** Convert insert into statement. */

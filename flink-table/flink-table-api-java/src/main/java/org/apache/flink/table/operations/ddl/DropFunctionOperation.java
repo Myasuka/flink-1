@@ -18,6 +18,7 @@
 
 package org.apache.flink.table.operations.ddl;
 
+import org.apache.flink.table.catalog.Language;
 import org.apache.flink.table.catalog.ObjectIdentifier;
 import org.apache.flink.table.operations.Operation;
 import org.apache.flink.table.operations.OperationUtils;
@@ -26,15 +27,20 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+import static org.apache.flink.util.Preconditions.checkArgument;
+
 /**
  * Operation to describe a DROP FUNCTION statement.
  */
 public class DropFunctionOperation implements DropOperation {
 	private final ObjectIdentifier functionIdentifier;
+	private final Language language;
 	private final boolean ifExists;
 
-	public DropFunctionOperation(ObjectIdentifier functionIdentifier, boolean ifExists) {
+	public DropFunctionOperation(ObjectIdentifier functionIdentifier, Language language, boolean ifExists) {
+		checkArgument(language != null, "language cannot be null");
 		this.functionIdentifier = functionIdentifier;
+		this.language = language;
 		this.ifExists = ifExists;
 	}
 
