@@ -28,8 +28,10 @@ import org.apache.flink.runtime.jobgraph.JobGraph;
 import org.apache.flink.runtime.jobmaster.JobResult;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.api.functions.sink.DiscardingSink;
+import org.apache.flink.yarn.configuration.YarnConfigOptions;
 import org.apache.flink.yarn.util.YarnTestUtils;
 
+import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.hadoop.yarn.api.records.YarnApplicationState;
@@ -39,12 +41,14 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.io.File;
+import java.io.IOException;
 import java.time.Duration;
-import java.util.Arrays;
+import java.util.Collections;
 import java.util.concurrent.CompletableFuture;
 
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.notNullValue;
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertThat;
 
 /**
@@ -64,60 +68,81 @@ public class YARNITCase extends YarnTestBase {
 
 	@Test
 	public void testPerJobMode() throws Exception {
-		runTest(() -> {
-			Configuration configuration = new Configuration();
-			configuration.setString(AkkaOptions.ASK_TIMEOUT, "30 s");
-			final YarnClient yarnClient = getYarnClient();
+		runTest(() -> internalTestPerJobMode(false));
+	}
 
-			try (final YarnClusterDescriptor yarnClusterDescriptor = org.apache.flink.yarn.YarnTestUtils.createClusterDescriptorWithLogging(
-					System.getenv(ConfigConstants.ENV_FLINK_CONF_DIR),
-					configuration,
-					getYarnConfiguration(),
-					yarnClient,
-					true)) {
+	@Test
+	public void testPreUploadedFlinkPath() throws Exception {
+		runTest(() -> internalTestPerJobMode(true));
+	}
 
-				yarnClusterDescriptor.setLocalJarPath(new Path(flinkUberjar.getAbsolutePath()));
-				yarnClusterDescriptor.addShipFiles(Arrays.asList(flinkLibFolder.listFiles()));
-				yarnClusterDescriptor.addShipFiles(Arrays.asList(flinkShadedHadoopDir.listFiles()));
+	private void internalTestPerJobMode(boolean usingPreUploadedFlink) throws Exception{
+		final YarnClient yarnClient = getYarnClient();
 
-				final ClusterSpecification clusterSpecification = new ClusterSpecification.ClusterSpecificationBuilder()
-					.setMasterMemoryMB(768)
-					.setTaskManagerMemoryMB(1024)
-					.setSlotsPerTaskManager(1)
-					.setNumberTaskManagers(1)
-					.createClusterSpecification();
+		Configuration configuration = new Configuration();
+		configuration.setString(AkkaOptions.ASK_TIMEOUT, "30 s");
 
-				StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
-				env.setParallelism(2);
+		if (usingPreUploadedFlink) {
+			configuration.setString(YarnConfigOptions.PRE_UPLOADED_FLINK_PATH, flinkLibFolder.getParentFile().toURI().toString());
+		}
 
-				env.addSource(new NoDataSource())
-					.shuffle()
-					.addSink(new DiscardingSink<>());
+		try (final YarnClusterDescriptor yarnClusterDescriptor = org.apache.flink.yarn.YarnTestUtils.createClusterDescriptorWithLogging(
+			System.getenv(ConfigConstants.ENV_FLINK_CONF_DIR),
+			configuration,
+			getYarnConfiguration(),
+			yarnClient,
+			true)) {
 
-				final JobGraph jobGraph = env.getStreamGraph().getJobGraph();
+			yarnClusterDescriptor.setLocalJarPath(new Path(flinkUberjar.getAbsolutePath()));
+			yarnClusterDescriptor.addShipFiles(Collections.singletonList(flinkLibFolder));
+			yarnClusterDescriptor.addShipFiles(Collections.singletonList(flinkShadedHadoopDir));
 
-				File testingJar = YarnTestBase.findFile("..", new YarnTestUtils.TestJarFinder("flink-yarn-tests"));
+			final ClusterSpecification clusterSpecification = new ClusterSpecification.ClusterSpecificationBuilder()
+				.setMasterMemoryMB(768)
+				.setTaskManagerMemoryMB(1024)
+				.setSlotsPerTaskManager(1)
+				.setNumberTaskManagers(1)
+				.createClusterSpecification();
 
-				jobGraph.addJar(new org.apache.flink.core.fs.Path(testingJar.toURI()));
+			StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+			env.setParallelism(2);
 
-				try (ClusterClient<ApplicationId> clusterClient = yarnClusterDescriptor.deployJobCluster(
-					clusterSpecification,
-					jobGraph,
-					false)) {
+			env.addSource(new NoDataSource())
+				.shuffle()
+				.addSink(new DiscardingSink<>());
 
-					ApplicationId applicationId = clusterClient.getClusterId();
+			final JobGraph jobGraph = env.getStreamGraph().getJobGraph();
 
-					final CompletableFuture<JobResult> jobResultCompletableFuture = clusterClient.requestJobResult(jobGraph.getJobID());
+			File testingJar = YarnTestBase.findFile("..", new YarnTestUtils.TestJarFinder("flink-yarn-tests"));
 
-					final JobResult jobResult = jobResultCompletableFuture.get();
+			jobGraph.addJar(new org.apache.flink.core.fs.Path(testingJar.toURI()));
 
-					assertThat(jobResult, is(notNullValue()));
-					assertThat(jobResult.getSerializedThrowable().isPresent(), is(false));
+			try (ClusterClient<ApplicationId> clusterClient = yarnClusterDescriptor.deployJobCluster(
+				clusterSpecification,
+				jobGraph,
+				false)) {
 
-					waitApplicationFinishedElseKillIt(applicationId, yarnAppTerminateTimeout, yarnClusterDescriptor);
-				}
+				ApplicationId applicationId = clusterClient.getClusterId();
+
+				final CompletableFuture<JobResult> jobResultCompletableFuture = clusterClient.requestJobResult(jobGraph.getJobID());
+
+				final JobResult jobResult = jobResultCompletableFuture.get();
+
+				assertThat(jobResult, is(notNullValue()));
+				assertThat(jobResult.getSerializedThrowable().isPresent(), is(false));
+
+				checkStagingDirectory(usingPreUploadedFlink, applicationId);
+
+				waitApplicationFinishedElseKillIt(applicationId, yarnAppTerminateTimeout, yarnClusterDescriptor);
 			}
-		});
+		}
+	}
+
+	private void checkStagingDirectory(boolean usingPreUploadedFlink, ApplicationId appId) throws IOException {
+		final FileSystem fs = FileSystem.get(YARN_CONFIGURATION);
+		final Path stagingDirectory = new Path(fs.getHomeDirectory(), ".flink/" + appId.toString());
+		// If pre-uploaded flink is set correctly, the lib directory will not be uploaded to staging directory.
+		assertEquals(!usingPreUploadedFlink, fs.exists(new Path(stagingDirectory, flinkLibFolder.getName())));
 	}
 
 	private void waitApplicationFinishedElseKillIt(

@@ -54,6 +54,7 @@ import org.apache.flink.yarn.configuration.YarnConfigOptionsInternal;
 import org.apache.flink.yarn.entrypoint.YarnJobClusterEntrypoint;
 import org.apache.flink.yarn.entrypoint.YarnSessionClusterEntrypoint;
 
+import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.permission.FsAction;
@@ -67,6 +68,7 @@ import org.apache.hadoop.yarn.api.records.ApplicationSubmissionContext;
 import org.apache.hadoop.yarn.api.records.ContainerLaunchContext;
 import org.apache.hadoop.yarn.api.records.FinalApplicationStatus;
 import org.apache.hadoop.yarn.api.records.LocalResource;
+import org.apache.hadoop.yarn.api.records.LocalResourceVisibility;
 import org.apache.hadoop.yarn.api.records.NodeReport;
 import org.apache.hadoop.yarn.api.records.NodeState;
 import org.apache.hadoop.yarn.api.records.Priority;
@@ -153,6 +155,10 @@ public class YarnClusterDescriptor implements ClusterDescriptor<ApplicationId> {
 
 	private String zookeeperNamespace;
 
+	// Pre-uploaded flink files, key is relative path(for example, lib/flink-dist_{version}.jar),
+	// and value is remote file status.
+	private final Map<String, FileStatus> preUploadedFlinkFiles;
+
 	private YarnConfigOptions.UserJarInclusion userJarInclusion;
 
 	public YarnClusterDescriptor(
@@ -177,6 +183,9 @@ public class YarnClusterDescriptor implements ClusterDescriptor<ApplicationId> {
 		this.customName = flinkConfiguration.getString(YarnConfigOptions.APPLICATION_NAME);
 		this.applicationType = flinkConfiguration.getString(YarnConfigOptions.APPLICATION_TYPE);
 		this.nodeLabel = flinkConfiguration.getString(YarnConfigOptions.NODE_LABEL);
+		this.preUploadedFlinkFiles = Utils.getPreUploadedFlinkFiles(
+			flinkConfiguration.get(YarnConfigOptions.PRE_UPLOADED_FLINK_PATH),
+			yarnConfiguration);
 
 		// we want to ignore the default value at this point.
 		this.zookeeperNamespace = flinkConfiguration.getString(HighAvailabilityOptions.HA_CLUSTER_ID, null);
@@ -254,7 +263,7 @@ public class YarnClusterDescriptor implements ClusterDescriptor<ApplicationId> {
 	 * Adds the given files to the list of files to ship.
 	 *
 	 * <p>Note that any file matching "<tt>flink-dist*.jar</tt>" will be excluded from the upload by
-	 * {@link #uploadAndRegisterFiles(Collection, FileSystem, Path, ApplicationId, List, Map, StringBuilder)}
+	 * {@link #uploadAndRegisterFiles(Collection, FileSystem, Path, ApplicationId, List, Map, StringBuilder, Map)}
 	 * since we upload the Flink uber jar ourselves and do not need to deploy it multiple times.
 	 *
 	 * @param shipFiles files to ship
@@ -789,7 +798,8 @@ public class YarnClusterDescriptor implements ClusterDescriptor<ApplicationId> {
 				appId,
 				paths,
 				localResources,
-				envShipFileList);
+				envShipFileList,
+				preUploadedFlinkFiles);
 
 		final List<String> userClassPaths = uploadAndRegisterFiles(
 				userJarFiles,
@@ -798,7 +808,8 @@ public class YarnClusterDescriptor implements ClusterDescriptor<ApplicationId> {
 				appId,
 				paths,
 				localResources,
-				envShipFileList);
+				envShipFileList,
+				preUploadedFlinkFiles);
 
 		if (userJarInclusion == YarnConfigOptions.UserJarInclusion.ORDER) {
 			systemClassPaths.addAll(userClassPaths);
@@ -820,6 +831,13 @@ public class YarnClusterDescriptor implements ClusterDescriptor<ApplicationId> {
 		}
 
 		// Setup jar for ApplicationMaster
+		FileStatus remoteFlinkJarFileStatus = null;
+		// Flink dist jar is not customized, try to get the corresponding remote uploaded path by relative local path.
+		if (!flinkConfiguration.containsKey(YarnConfigOptions.FLINK_DIST_JAR.key())) {
+			Path flinkHomeDir = flinkJarPath.getParent().getParent();
+			remoteFlinkJarFileStatus = preUploadedFlinkFiles.get(
+				flinkHomeDir.toUri().relativize(flinkJarPath.toUri()).getPath());
+		}
 		Path remotePathJar = setupSingleLocalResource(
 				flinkJarPath.getName(),
 				fs,
@@ -827,7 +845,15 @@ public class YarnClusterDescriptor implements ClusterDescriptor<ApplicationId> {
 				flinkJarPath,
 				localResources,
 				homeDir,
-				"");
+				"",
+			remoteFlinkJarFileStatus);
+
+		StringBuilder remoteFlinkJarResourceInfo = new StringBuilder(remotePathJar.toString());
+		if (remoteFlinkJarFileStatus != null) {
+			remoteFlinkJarResourceInfo.append(";").append(remoteFlinkJarFileStatus.getLen())
+				.append(";").append(remoteFlinkJarFileStatus.getModificationTime())
+				.append(";").append(LocalResourceVisibility.PUBLIC);
+		}
 
 		// set the right configuration values for the TaskManager
 		configuration.setInteger(
@@ -851,7 +877,8 @@ public class YarnClusterDescriptor implements ClusterDescriptor<ApplicationId> {
 				new Path(tmpConfigurationFile.getAbsolutePath()),
 				localResources,
 				homeDir,
-				"");
+				"",
+				null);
 
 		paths.add(remotePathJar);
 		classPathBuilder.append(flinkJarPath.getName()).append(File.pathSeparator);
@@ -885,7 +912,8 @@ public class YarnClusterDescriptor implements ClusterDescriptor<ApplicationId> {
 						new Path(fp.toURI()),
 						localResources,
 						homeDir,
-						"");
+						"",
+						null);
 				paths.add(pathFromYarnURL);
 				classPathBuilder.append(jobGraphFilename).append(File.pathSeparator);
 			} catch (Exception e) {
@@ -916,7 +944,8 @@ public class YarnClusterDescriptor implements ClusterDescriptor<ApplicationId> {
 					yarnSitePath,
 					localResources,
 					homeDir,
-					"");
+					"",
+					null);
 
 			String krb5Config = System.getProperty("java.security.krb5.conf");
 			if (krb5Config != null && krb5Config.length() != 0) {
@@ -930,7 +959,8 @@ public class YarnClusterDescriptor implements ClusterDescriptor<ApplicationId> {
 						krb5ConfPath,
 						localResources,
 						homeDir,
-						"");
+						"",
+						null);
 				hasKrb5 = true;
 			}
 		}
@@ -947,7 +977,8 @@ public class YarnClusterDescriptor implements ClusterDescriptor<ApplicationId> {
 					new Path(keytab),
 					localResources,
 					homeDir,
-					"");
+					"",
+					null);
 		}
 
 		final boolean hasLogback = logConfigFilePath != null && logConfigFilePath.endsWith(CONFIG_FILE_LOGBACK_NAME);
@@ -979,7 +1010,7 @@ public class YarnClusterDescriptor implements ClusterDescriptor<ApplicationId> {
 		// set Flink on YARN internal configuration values
 		appMasterEnv.put(YarnConfigKeys.ENV_TM_COUNT, String.valueOf(clusterSpecification.getNumberTaskManagers()));
 		appMasterEnv.put(YarnConfigKeys.ENV_TM_MEMORY, String.valueOf(clusterSpecification.getTaskManagerMemoryMB()));
-		appMasterEnv.put(YarnConfigKeys.FLINK_JAR_PATH, remotePathJar.toString());
+		appMasterEnv.put(YarnConfigKeys.FLINK_JAR_PATH, remoteFlinkJarResourceInfo.toString());
 		appMasterEnv.put(YarnConfigKeys.ENV_APP_ID, appId.toString());
 		appMasterEnv.put(YarnConfigKeys.ENV_CLIENT_HOME_DIR, homeDir.toString());
 		appMasterEnv.put(YarnConfigKeys.ENV_CLIENT_SHIP_FILES, envShipFileList.toString());
@@ -1120,6 +1151,12 @@ public class YarnClusterDescriptor implements ClusterDescriptor<ApplicationId> {
 	 * 		local path to the file
 	 * @param localResources
 	 * 		map of resources
+	 * @param targetHomeDir
+	 * 		remote home directory base (will be extended)
+	 * @param relativeTargetPath
+	 * 		relative target path of the file (will be prefixed with the full home directory we set up)
+	 * @param preUploadedFileStatus
+	 *    pre-uploaded file status of localSrcPath
 	 *
 	 * @return the remote path to the uploaded resource
 	 */
@@ -1130,13 +1167,15 @@ public class YarnClusterDescriptor implements ClusterDescriptor<ApplicationId> {
 			Path localSrcPath,
 			Map<String, LocalResource> localResources,
 			Path targetHomeDir,
-			String relativeTargetPath) throws IOException {
+			String relativeTargetPath,
+			@Nullable FileStatus preUploadedFileStatus) throws IOException {
 		Tuple2<Path, LocalResource> resource = Utils.setupLocalResource(
 				fs,
 				appId.toString(),
 				localSrcPath,
 				targetHomeDir,
-				relativeTargetPath);
+				relativeTargetPath,
+				preUploadedFileStatus);
 
 		localResources.put(key, resource.f1);
 
@@ -1171,6 +1210,8 @@ public class YarnClusterDescriptor implements ClusterDescriptor<ApplicationId> {
 	 * 		map of resources (uploaded resources will be added)
 	 * @param envShipFileList
 	 * 		list of shipped files in a format understood by {@link Utils#createTaskExecutorContext}
+	 * @param preUploadedFlinkFiles
+	 *    map of pre-uploaded flink files, key is relative path and value is file status
 	 *
 	 * @return list of class paths with the the proper resource keys from the registration
 	 */
@@ -1181,7 +1222,8 @@ public class YarnClusterDescriptor implements ClusterDescriptor<ApplicationId> {
 			ApplicationId appId,
 			List<Path> remotePaths,
 			Map<String, LocalResource> localResources,
-			StringBuilder envShipFileList) throws IOException {
+			StringBuilder envShipFileList,
+			Map<String, FileStatus> preUploadedFlinkFiles) throws IOException {
 		final List<Path> localPaths = new ArrayList<>();
 		final List<Path> relativePaths = new ArrayList<>();
 		for (File shipFile : shipFiles) {
@@ -1210,6 +1252,7 @@ public class YarnClusterDescriptor implements ClusterDescriptor<ApplicationId> {
 			final Path relativePath = relativePaths.get(i);
 			if (!isDistJar(relativePath.getName())) {
 				final String key = relativePath.toString();
+				final FileStatus preUploadedFile = preUploadedFlinkFiles.get(key);
 				final Path remotePath = setupSingleLocalResource(
 						key,
 						fs,
@@ -1217,9 +1260,17 @@ public class YarnClusterDescriptor implements ClusterDescriptor<ApplicationId> {
 						localPath,
 						localResources,
 						targetHomeDir,
-						relativePath.getParent().toString());
+						relativePath.getParent().toString(),
+						preUploadedFile
+				);
 				remotePaths.add(remotePath);
-				envShipFileList.append(key).append("=").append(remotePath).append(",");
+				envShipFileList.append(key).append("=").append(remotePath);
+				if (preUploadedFile != null) {
+					envShipFileList.append(";").append(preUploadedFile.getLen())
+						.append(";").append(preUploadedFile.getModificationTime())
+						.append(";").append(LocalResourceVisibility.PUBLIC);
+				}
+				envShipFileList.append(",");
 				// add files to the classpath
 				if (key.endsWith("jar")) {
 					archives.add(relativePath.toString());
