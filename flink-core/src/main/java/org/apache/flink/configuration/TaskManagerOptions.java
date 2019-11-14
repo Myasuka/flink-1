@@ -161,31 +161,6 @@ public class TaskManagerOptions {
 			.withDescription("Size of memory buffers used by the network stack and the memory manager.");
 
 	/**
-	 * Amount of memory to be allocated by the task manager's memory manager. If not
-	 * set, a relative fraction will be allocated, as defined by {@link #MANAGED_MEMORY_FRACTION}.
-	 */
-	@Deprecated
-	public static final ConfigOption<String> LEGACY_MANAGED_MEMORY_SIZE =
-			key("taskmanager.memory.size")
-			.defaultValue("0")
-			.withDescription("The amount of memory (in megabytes) that the task manager reserves on-heap or off-heap" +
-				" (depending on taskmanager.memory.off-heap) for sorting, hash tables, and caching of intermediate" +
-				" results. If unspecified, the memory manager will take a fixed ratio with respect to the size of" +
-				" the task manager JVM as specified by taskmanager.memory.fraction.");
-
-	/**
-	 * Memory allocation method (JVM heap or off-heap), used for managed memory of the TaskManager
-	 * as well as the network buffers.
-	 **/
-	@Deprecated
-	public static final ConfigOption<Boolean> MEMORY_OFF_HEAP =
-			key("taskmanager.memory.off-heap")
-			.defaultValue(false)
-				.withDescription("Memory allocation method (JVM heap or off-heap), used for managed memory of the" +
-						" TaskManager. For setups with larger quantities of memory, this can" +
-						" improve the efficiency of the operations performed on the memory.");
-
-	/**
 	 * The config parameter for automatically defining the TaskManager's binding address,
 	 * if {@link #HOST} configuration option is not set.
 	 */
@@ -283,7 +258,7 @@ public class TaskManagerOptions {
 	public static final ConfigOption<String> MANAGED_MEMORY_SIZE =
 		key("taskmanager.memory.managed.size")
 			.noDefaultValue()
-			.withDeprecatedKeys(LEGACY_MANAGED_MEMORY_SIZE.key())
+			.withDeprecatedKeys("taskmanager.memory.size")
 			.withDescription("Managed Memory size for TaskExecutors. This is the size of memory managed by the memory"
 				+ " manager, including both On-Heap Managed Memory and Off-Heap Managed Memory, reserved for sorting,"
 				+ " hash tables, caching of intermediate results and state backends. Memory consumers can either"
@@ -309,6 +284,18 @@ public class TaskManagerOptions {
 			.withDescription("Off-Heap Managed Memory size for TaskExecutors. This is the part of Managed Memory that is"
 				+ " off-heap, while the remaining is on-heap. If unspecified, it will be derived to make up the"
 				+ " configured fraction of the Managed Memory size.");
+
+	/**
+	 * Memory allocation method (JVM heap or off-heap), used for managed memory of the TaskManager
+	 * as well as the network buffers.
+	 **/
+	@Deprecated
+	public static final ConfigOption<Boolean> MEMORY_OFF_HEAP =
+		key("taskmanager.memory.off-heap")
+			.defaultValue(false)
+			.withDescription("Memory allocation method (JVM heap or off-heap), used for managed memory of the" +
+				" TaskManager. For setups with larger quantities of memory, this can" +
+				" improve the efficiency of the operations performed on the memory.");
 
 	/**
 	 * Fraction of Managed Memory that Off-Heap Managed Memory takes.
