@@ -29,7 +29,9 @@ import org.apache.flink.util.StringUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.LocatedFileStatus;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.fs.RemoteIterator;
 import org.apache.hadoop.io.DataOutputBuffer;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapreduce.security.TokenCache;
@@ -50,6 +52,8 @@ import org.apache.hadoop.yarn.util.ConverterUtils;
 import org.apache.hadoop.yarn.util.Records;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import javax.annotation.Nullable;
 
 import java.io.File;
 import java.io.FileNotFoundException;
@@ -141,6 +145,8 @@ public final class Utils {
 	 * 		remote home directory base (will be extended)
 	 * @param relativeTargetPath
 	 * 		relative target path of the file (will be prefixed be the full home directory we set up)
+	 * @param preUploadedFileStatus
+	 *    the corresponding pre-uploaded file status of localSrcPath
 	 *
 	 * @return Path to remote file (usually hdfs)
 	 */
@@ -149,61 +155,79 @@ public final class Utils {
 		String appId,
 		Path localSrcPath,
 		Path homedir,
-		String relativeTargetPath) throws IOException {
+		String relativeTargetPath,
+		@Nullable FileStatus preUploadedFileStatus) throws IOException {
 
-		File localFile = new File(localSrcPath.toUri().getPath());
-		if (localFile.isDirectory()) {
-			throw new IllegalArgumentException("File to copy must not be a directory: " +
-				localSrcPath);
-		}
+		Path dst;
+		LocalResource resource;
 
-		// copy resource to HDFS
-		String suffix =
-			".flink/"
-				+ appId
-				+ (relativeTargetPath.isEmpty() ? "" : "/" + relativeTargetPath)
-				+ "/" + localSrcPath.getName();
-
-		Path dst = new Path(homedir, suffix);
-
-		LOG.debug("Copying from {} to {}", localSrcPath, dst);
-
-		fs.copyFromLocalFile(false, true, localSrcPath, dst);
-
-		// Note: If we directly used registerLocalResource(FileSystem, Path) here, we would access the remote
-		//       file once again which has problems with eventually consistent read-after-write file
-		//       systems. Instead, we decide to wait until the remote file be available.
-
-		FileStatus[] fss = null;
-		int iter = 1;
-		while (iter <= REMOTE_RESOURCES_FETCH_NUM_RETRY + 1) {
-			try {
-				fss = fs.listStatus(dst);
-				break;
-			} catch (FileNotFoundException e) {
-				LOG.debug("Got FileNotFoundException while fetching uploaded remote resources at retry num {}", iter);
-				try {
-					LOG.debug("Sleeping for {}ms", REMOTE_RESOURCES_FETCH_WAIT_IN_MILLI);
-					TimeUnit.MILLISECONDS.sleep(REMOTE_RESOURCES_FETCH_WAIT_IN_MILLI);
-				} catch (InterruptedException ie) {
-					LOG.warn("Failed to sleep for {}ms at retry num {} while fetching uploaded remote resources",
-						REMOTE_RESOURCES_FETCH_WAIT_IN_MILLI, iter, ie);
-				}
-				iter++;
-			}
-		}
-
-		final long dstModificationTime;
-		if (fss != null && fss.length >  0) {
-			dstModificationTime = fss[0].getModificationTime();
-			LOG.debug("Got modification time {} from remote path {}", dstModificationTime, dst);
+		if (preUploadedFileStatus != null) {
+			dst = preUploadedFileStatus.getPath();
+			resource = registerLocalResource(
+				dst,
+				preUploadedFileStatus.getLen(),
+				preUploadedFileStatus.getModificationTime(),
+				LocalResourceVisibility.PUBLIC);
+			LOG.debug("Using pre-uploaded file {} to register local resource, the corresponding local file is {}", dst, localSrcPath);
 		} else {
-			dstModificationTime = localFile.lastModified();
-			LOG.debug("Failed to fetch remote modification time from {}, using local timestamp {}", dst, dstModificationTime);
+			File localFile = new File(localSrcPath.toUri().getPath());
+			if (localFile.isDirectory()) {
+				throw new IllegalArgumentException("File to copy must not be a directory: " +
+					localSrcPath);
+			}
+
+			// copy resource to HDFS
+			String suffix =
+				".flink/"
+					+ appId
+					+ (relativeTargetPath.isEmpty() ? "" : "/" + relativeTargetPath)
+					+ "/" + localSrcPath.getName();
+
+			dst = new Path(homedir, suffix);
+
+			LOG.debug("Copying from {} to {}", localSrcPath, dst);
+
+			fs.copyFromLocalFile(false, true, localSrcPath, dst);
+
+			// Note: If we directly used registerLocalResource(FileSystem, Path) here, we would access the remote
+			//       file once again which has problems with eventually consistent read-after-write file
+			//       systems. Instead, we decide to wait until the remote file be available.
+
+			FileStatus[] fss = null;
+			int iter = 1;
+			while (iter <= REMOTE_RESOURCES_FETCH_NUM_RETRY + 1) {
+				try {
+					fss = fs.listStatus(dst);
+					break;
+				} catch (FileNotFoundException e) {
+					LOG.debug("Got FileNotFoundException while fetching uploaded remote resources at retry num {}", iter);
+					try {
+						LOG.debug("Sleeping for {}ms", REMOTE_RESOURCES_FETCH_WAIT_IN_MILLI);
+						TimeUnit.MILLISECONDS.sleep(REMOTE_RESOURCES_FETCH_WAIT_IN_MILLI);
+					} catch (InterruptedException ie) {
+						LOG.warn("Failed to sleep for {}ms at retry num {} while fetching uploaded remote resources",
+							REMOTE_RESOURCES_FETCH_WAIT_IN_MILLI, iter, ie);
+					}
+					iter++;
+				}
+			}
+
+			final long dstModificationTime;
+			if (fss != null && fss.length >  0) {
+				dstModificationTime = fss[0].getModificationTime();
+				LOG.debug("Got modification time {} from remote path {}", dstModificationTime, dst);
+			} else {
+				dstModificationTime = localFile.lastModified();
+				LOG.debug("Failed to fetch remote modification time from {}, using local timestamp {}", dst, dstModificationTime);
+			}
+			// now create the resource instance
+			resource = registerLocalResource(
+				dst,
+				localFile.length(),
+				dstModificationTime,
+				LocalResourceVisibility.APPLICATION);
 		}
 
-		// now create the resource instance
-		LocalResource resource = registerLocalResource(dst, localFile.length(), dstModificationTime);
 		return Tuple2.of(dst, resource);
 	}
 
@@ -236,19 +260,22 @@ public final class Utils {
 	 * @param remoteRsrcPath	remote location of the resource
 	 * @param resourceSize		size of the resource
 	 * @param resourceModificationTime last modification time of the resource
+	 * @param visibility Resources with application visibility could only be used by the specific application.
+	 *                   Public visibility will make the resources could be shared by different applications.
 	 *
 	 * @return YARN resource
 	 */
 	private static LocalResource registerLocalResource(
 			Path remoteRsrcPath,
 			long resourceSize,
-			long resourceModificationTime) {
+			long resourceModificationTime,
+			LocalResourceVisibility visibility) {
 		LocalResource localResource = Records.newRecord(LocalResource.class);
 		localResource.setResource(ConverterUtils.getYarnUrlFromURI(remoteRsrcPath.toUri()));
 		localResource.setSize(resourceSize);
 		localResource.setTimestamp(resourceModificationTime);
 		localResource.setType(LocalResourceType.FILE);
-		localResource.setVisibility(LocalResourceVisibility.APPLICATION);
+		localResource.setVisibility(visibility);
 		return localResource;
 	}
 
@@ -509,7 +536,8 @@ public final class Utils {
 					appId,
 					new Path(taskManagerConfigFile.toURI()),
 					homeDirPath,
-					"").f1;
+					"",
+					null).f1;
 
 				log.debug("Prepared local resource for modified yaml: {}", flinkConf);
 			} finally {
@@ -539,13 +567,23 @@ public final class Utils {
 		}
 
 		// prepare additional files to be shipped
-		for (String pathStr : shipListString.split(",")) {
-			if (!pathStr.isEmpty()) {
-				String[] keyAndPath = pathStr.split("=");
-				require(keyAndPath.length == 2, "Invalid entry in ship file list: %s", pathStr);
-				Path path = new Path(keyAndPath[1]);
-				LocalResource resource = registerLocalResource(path.getFileSystem(yarnConfig), path);
-				taskManagerLocalResources.put(keyAndPath[0], resource);
+		for (String shipFileInfoStr : shipListString.split(",")) {
+			if (!shipFileInfoStr.isEmpty()) {
+				String[] keyAndPathInfo = shipFileInfoStr.split("=");
+				require(keyAndPathInfo.length == 2, "Invalid entry in ship file list: %s", shipFileInfoStr);
+				String[] pathInfo = keyAndPathInfo[1].split(";");
+				Path path = new Path(pathInfo[0]);
+				LocalResource resource;
+				// RemotePath;resourceSize;resourceModificationTime;LocalResourceVisibility
+				if (pathInfo.length == 4) {
+					long resourceSize = Long.parseLong(pathInfo[1]);
+					long resourceModificationTime = Long.parseLong(pathInfo[2]);
+					LocalResourceVisibility resourceVisibility = LocalResourceVisibility.valueOf(pathInfo[3]);
+					resource = registerLocalResource(path, resourceSize, resourceModificationTime, resourceVisibility);
+				} else {
+					resource = registerLocalResource(path.getFileSystem(yarnConfig), path);
+				}
+				taskManagerLocalResources.put(keyAndPathInfo[0], resource);
 			}
 		}
 
@@ -625,6 +663,30 @@ public final class Utils {
 		}
 
 		return ctx;
+	}
+
+	static Map<String, FileStatus> getPreUploadedFlinkFiles(
+		@Nullable String flinkSharedBinary,
+		Configuration yarnConfiguration) {
+		Map<String, FileStatus> flinkShareFiles = new HashMap<>();
+		if (flinkSharedBinary != null) {
+			try {
+				FileSystem fileSystem = FileSystem.get(yarnConfiguration);
+				Path flinkSharedPath = new Path(flinkSharedBinary);
+				if (fileSystem.exists(flinkSharedPath)) {
+					RemoteIterator<LocatedFileStatus> iterable = fileSystem.listFiles(flinkSharedPath, true);
+					while (iterable.hasNext()) {
+						LocatedFileStatus locatedFileStatus = iterable.next();
+						String relative = flinkSharedPath.toUri().relativize(locatedFileStatus.getPath().toUri()).getPath();
+						flinkShareFiles.put(relative, locatedFileStatus);
+						LOG.debug("Found pre-uploaded file {} under {}", relative, flinkSharedPath);
+					}
+				}
+			} catch (IOException e) {
+				LOG.warn("Error to get the ");
+			}
+		}
+		return flinkShareFiles;
 	}
 
 	/**
