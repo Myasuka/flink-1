@@ -501,7 +501,7 @@ public class TaskExecutorResourceUtilsTest extends TestLogger {
 		final MemorySize totalProcessMemorySize = MemorySize.parse("1g");
 
 		@SuppressWarnings("deprecation")
-		final ConfigOption<String> legacyOption = TaskManagerOptions.TASK_MANAGER_HEAP_MEMORY;
+		final ConfigOption<String> legacyOption = TaskManagerOptions.TOTAL_PROCESS_MEMORY;
 
 		Configuration conf = new Configuration();
 		conf.setString(legacyOption, totalProcessMemorySize.getMebiBytes() + "m");
