@@ -18,16 +18,17 @@
 
 package org.apache.flink.sql.parser.ddl;
 
-import org.apache.flink.sql.parser.ExtendedSqlNode;
-import org.apache.flink.sql.parser.error.SqlValidateException;
-
 import org.apache.calcite.sql.SqlCharStringLiteral;
 import org.apache.calcite.sql.SqlCreate;
 import org.apache.calcite.sql.SqlIdentifier;
 import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.sql.SqlNode;
+import org.apache.calcite.sql.SqlOperator;
 import org.apache.calcite.sql.SqlSpecialOperator;
 import org.apache.calcite.sql.SqlWriter;
+import org.apache.flink.sql.parser.ExtendedSqlNode;
+import org.apache.flink.sql.parser.error.SqlValidateException;
+
 import org.apache.calcite.sql.parser.SqlParserPos;
 import org.apache.calcite.util.ImmutableNullableList;
 
@@ -45,25 +46,41 @@ public class SqlCreateFunction extends SqlCreate implements ExtendedSqlNode {
 
 	private SqlIdentifier functionName;
 	private SqlCharStringLiteral functionClassName;
+	private SqlCharStringLiteral functionLanguage;
+	private boolean isSystemFunction;
 
 	public SqlCreateFunction(
 		SqlParserPos pos,
 		SqlIdentifier functionName,
-		SqlCharStringLiteral functionClassName, boolean ifNotExists) {
+		SqlCharStringLiteral functionClassName,
+		SqlCharStringLiteral functionLanguage,
+		boolean ifNotExists,
+		boolean isSystemFunction) {
 		super(OPERATOR, pos, false, ifNotExists);
 		this.functionName = requireNonNull(functionName);
 		this.functionClassName = requireNonNull(functionClassName);
+		this.isSystemFunction = requireNonNull(isSystemFunction);
+		this.functionLanguage = functionLanguage;
+	}
+	@Override
+	public SqlOperator getOperator() {
+		return OPERATOR;
 	}
 
 	@Nonnull
 	@Override
 	public List<SqlNode> getOperandList() {
-		return ImmutableNullableList.of(functionName, functionClassName);
+		return ImmutableNullableList.of(functionName, functionClassName, functionLanguage);
 	}
 
 	@Override
 	public void unparse(SqlWriter writer, int leftPrec, int rightPrec) {
 		writer.keyword("CREATE");
+		if (isSystemFunction) {
+			writer.keyword("TEMPORARY SYSTEM");
+		} else {
+			writer.keyword("TEMPORARY");
+		}
 		writer.keyword("FUNCTION");
 		if (ifNotExists) {
 			writer.keyword("IF NOT EXISTS");
@@ -71,6 +88,10 @@ public class SqlCreateFunction extends SqlCreate implements ExtendedSqlNode {
 		functionName.unparse(writer, leftPrec, rightPrec);
 		writer.keyword("AS");
 		functionClassName.unparse(writer, leftPrec, rightPrec);
+		if (functionLanguage != null) {
+			writer.keyword("LANGUAGE");
+			functionLanguage.unparse(writer, leftPrec, rightPrec);
+		}
 	}
 
 	@Override
@@ -82,12 +103,20 @@ public class SqlCreateFunction extends SqlCreate implements ExtendedSqlNode {
 		return ifNotExists;
 	}
 
+	public boolean isSystemFunction() {
+		return isSystemFunction;
+	}
+
 	public SqlIdentifier getFunctionName() {
 		return this.functionName;
 	}
 
 	public SqlCharStringLiteral getFunctionClassName() {
 		return this.functionClassName;
+	}
+
+	public SqlCharStringLiteral getFunctionLanguage() {
+		return this.functionLanguage;
 	}
 
 	public String[] fullFunctionName() {
