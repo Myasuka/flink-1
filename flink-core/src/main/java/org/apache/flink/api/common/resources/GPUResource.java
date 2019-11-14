@@ -21,6 +21,8 @@ package org.apache.flink.api.common.resources;
 import org.apache.flink.annotation.Internal;
 import org.apache.flink.api.common.operators.ResourceSpec;
 
+import java.math.BigDecimal;
+
 /**
  * The GPU resource.
  */
@@ -33,8 +35,12 @@ public class GPUResource extends Resource {
 		super(ResourceSpec.GPU_NAME, value);
 	}
 
+	private GPUResource(BigDecimal value) {
+		super(ResourceSpec.GPU_NAME, value);
+	}
+
 	@Override
-	public Resource create(double value) {
+	public Resource create(BigDecimal value) {
 		return new GPUResource(value);
 	}
 }
