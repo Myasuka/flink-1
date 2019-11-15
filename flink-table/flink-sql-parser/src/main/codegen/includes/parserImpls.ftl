@@ -190,6 +190,22 @@ SqlShowTables SqlShowTables() :
     }
 }
 
+SqlRichDescribeTable SqlRichDescribeTable() :
+{
+    SqlIdentifier tableName;
+    SqlParserPos pos;
+    boolean isExtended = false;
+}
+{
+    <DESCRIBE> { pos = getPos();}
+    [ <EXTENDED> { isExtended = true;} ]
+    tableName = CompoundIdentifier()
+    {
+        return new SqlRichDescribeTable(pos, tableName, isExtended);
+    }
+
+}
+
 void TableColumn(TableCreationContext context) :
 {
 }
