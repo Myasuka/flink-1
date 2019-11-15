@@ -84,6 +84,7 @@ public class BatchExecutor extends ExecutorBase {
 			}
 		});
 		streamGraph.setChaining(true);
+		streamGraph.setAllVerticesInSameSlotSharingGroupByDefault(false);
 		streamGraph.setScheduleMode(ScheduleMode.LAZY_FROM_SOURCES_WITH_BATCH_SLOT_REQUEST);
 		streamGraph.setStateBackend(null);
 		if (streamGraph.getCheckpointConfig().isCheckpointingEnabled()) {

@@ -39,7 +39,7 @@ public class BatchAbstractTestBase {
 			new MiniClusterResourceConfiguration.Builder()
 					.setConfiguration(getConfiguration())
 					.setNumberTaskManagers(1)
-					.setNumberSlotsPerTaskManager(DEFAULT_PARALLELISM)
+					.setNumberSlotsPerTaskManager(DEFAULT_PARALLELISM * 2) // TODO: Revert once FLINK-13708 has been fixed
 					.build());
 
 	@ClassRule
@@ -47,7 +47,7 @@ public class BatchAbstractTestBase {
 
 	private static Configuration getConfiguration() {
 		Configuration config = new Configuration();
-		config.setString(TaskManagerOptions.MANAGED_MEMORY_SIZE, "100m");
+		config.setString(TaskManagerOptions.LEGACY_MANAGED_MEMORY_SIZE, "100m");
 		return config;
 	}
 

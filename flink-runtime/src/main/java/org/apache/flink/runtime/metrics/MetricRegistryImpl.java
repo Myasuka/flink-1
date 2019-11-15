@@ -60,7 +60,7 @@ import java.util.concurrent.TimeUnit;
  * connection between {@link MetricGroup MetricGroups} and {@link MetricReporter MetricReporters}.
  */
 public class MetricRegistryImpl implements MetricRegistry {
-	static final Logger LOG = LoggerFactory.getLogger(MetricRegistryImpl.class);
+	private static final Logger LOG = LoggerFactory.getLogger(MetricRegistryImpl.class);
 
 	private final Object lock = new Object();
 
@@ -338,7 +338,7 @@ public class MetricRegistryImpl implements MetricRegistry {
 								reporter.notifyOfAddedMetric(metric, metricName, front);
 							}
 						} catch (Exception e) {
-							LOG.warn("Error while registering metric.", e);
+							LOG.warn("Error while registering metric: {}.", metricName, e);
 						}
 					}
 				}
@@ -347,7 +347,7 @@ public class MetricRegistryImpl implements MetricRegistry {
 						queryService.addMetric(metricName, metric, group);
 					}
 				} catch (Exception e) {
-					LOG.warn("Error while registering metric.", e);
+					LOG.warn("Error while registering metric: {}.", metricName, e);
 				}
 				try {
 					if (metric instanceof View) {
@@ -357,7 +357,7 @@ public class MetricRegistryImpl implements MetricRegistry {
 						viewUpdater.notifyOfAddedView((View) metric);
 					}
 				} catch (Exception e) {
-					LOG.warn("Error while registering metric.", e);
+					LOG.warn("Error while registering metric: {}.", metricName, e);
 				}
 			}
 		}
@@ -378,7 +378,7 @@ public class MetricRegistryImpl implements MetricRegistry {
 								reporter.notifyOfRemovedMetric(metric, metricName, front);
 							}
 						} catch (Exception e) {
-							LOG.warn("Error while registering metric.", e);
+							LOG.warn("Error while unregistering metric: {}.", metricName, e);
 						}
 					}
 				}
@@ -387,7 +387,7 @@ public class MetricRegistryImpl implements MetricRegistry {
 						queryService.removeMetric(metric);
 					}
 				} catch (Exception e) {
-					LOG.warn("Error while registering metric.", e);
+					LOG.warn("Error while unregistering metric: {}.", metricName, e);
 				}
 				try {
 					if (metric instanceof View) {
@@ -396,7 +396,7 @@ public class MetricRegistryImpl implements MetricRegistry {
 						}
 					}
 				} catch (Exception e) {
-					LOG.warn("Error while registering metric.", e);
+					LOG.warn("Error while unregistering metric: {}", metricName, e);
 				}
 			}
 		}

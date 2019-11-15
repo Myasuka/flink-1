@@ -17,6 +17,7 @@
 
 package org.apache.flink.streaming.api.graph;
 
+import org.apache.flink.api.common.ExecutionConfig;
 import org.apache.flink.api.common.functions.FilterFunction;
 import org.apache.flink.api.common.functions.FlatMapFunction;
 import org.apache.flink.api.common.functions.MapFunction;
@@ -27,7 +28,6 @@ import org.apache.flink.api.common.operators.ResourceSpec;
 import org.apache.flink.api.common.operators.util.UserCodeWrapper;
 import org.apache.flink.api.common.typeinfo.BasicTypeInfo;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
-import org.apache.flink.api.dag.Transformation;
 import org.apache.flink.api.java.io.DiscardingOutputFormat;
 import org.apache.flink.api.java.io.TypeSerializerInputFormat;
 import org.apache.flink.api.java.tuple.Tuple2;
@@ -37,6 +37,7 @@ import org.apache.flink.runtime.jobgraph.InputOutputFormatVertex;
 import org.apache.flink.runtime.jobgraph.JobGraph;
 import org.apache.flink.runtime.jobgraph.JobVertex;
 import org.apache.flink.runtime.jobgraph.OperatorID;
+import org.apache.flink.runtime.jobgraph.SavepointRestoreSettings;
 import org.apache.flink.runtime.jobgraph.ScheduleMode;
 import org.apache.flink.runtime.jobgraph.tasks.JobCheckpointingSettings;
 import org.apache.flink.runtime.jobmanager.scheduler.CoLocationGroup;
@@ -47,6 +48,7 @@ import org.apache.flink.streaming.api.datastream.DataStreamSink;
 import org.apache.flink.streaming.api.datastream.DataStreamSource;
 import org.apache.flink.streaming.api.datastream.IterativeStream;
 import org.apache.flink.streaming.api.datastream.SingleOutputStreamOperator;
+import org.apache.flink.streaming.api.environment.CheckpointConfig;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.api.functions.sink.SinkFunction;
 import org.apache.flink.streaming.api.functions.source.InputFormatSourceFunction;
@@ -54,6 +56,7 @@ import org.apache.flink.streaming.api.functions.source.ParallelSourceFunction;
 import org.apache.flink.streaming.api.transformations.PartitionTransformation;
 import org.apache.flink.streaming.api.transformations.ShuffleMode;
 import org.apache.flink.streaming.runtime.partitioner.ForwardPartitioner;
+import org.apache.flink.streaming.runtime.partitioner.RebalancePartitioner;
 import org.apache.flink.streaming.runtime.partitioner.RescalePartitioner;
 import org.apache.flink.streaming.util.TestAnyModeReadingStreamOperator;
 import org.apache.flink.util.Collector;
@@ -62,16 +65,18 @@ import org.apache.flink.util.TestLogger;
 import org.junit.Test;
 
 import java.lang.reflect.Method;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import static org.hamcrest.CoreMatchers.is;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
 
 /**
@@ -137,13 +142,26 @@ public class StreamingJobGraphGeneratorTest extends TestLogger {
 	@Test
 	public void testDisabledCheckpointing() throws Exception {
 		StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
-		StreamGraph streamGraph = new StreamGraph(env.getConfig(), env.getCheckpointConfig());
+		StreamGraph streamGraph = new StreamGraph(env.getConfig(), env.getCheckpointConfig(), SavepointRestoreSettings.none());
 		assertFalse("Checkpointing enabled", streamGraph.getCheckpointConfig().isCheckpointingEnabled());
 
 		JobGraph jobGraph = StreamingJobGraphGenerator.createJobGraph(streamGraph);
 
 		JobCheckpointingSettings snapshottingSettings = jobGraph.getCheckpointingSettings();
 		assertEquals(Long.MAX_VALUE, snapshottingSettings.getCheckpointCoordinatorConfiguration().getCheckpointInterval());
+	}
+
+	@Test
+	public void generatorForwardsSavepointRestoreSettings() {
+		StreamGraph streamGraph = new StreamGraph(
+				new ExecutionConfig(),
+				new CheckpointConfig(),
+				SavepointRestoreSettings.forPath("hello"));
+
+		JobGraph jobGraph = StreamingJobGraphGenerator.createJobGraph(streamGraph);
+
+		SavepointRestoreSettings savepointRestoreSettings = jobGraph.getSavepointRestoreSettings();
+		assertThat(savepointRestoreSettings.getRestorePath(), is("hello"));
 	}
 
 	/**
@@ -195,11 +213,11 @@ public class StreamingJobGraphGeneratorTest extends TestLogger {
 	 */
 	@Test
 	public void testResourcesForChainedSourceSink() throws Exception {
-		ResourceSpec resource1 = ResourceSpec.newBuilder().setCpuCores(0.1).setHeapMemoryInMB(100).build();
-		ResourceSpec resource2 = ResourceSpec.newBuilder().setCpuCores(0.2).setHeapMemoryInMB(200).build();
-		ResourceSpec resource3 = ResourceSpec.newBuilder().setCpuCores(0.3).setHeapMemoryInMB(300).build();
-		ResourceSpec resource4 = ResourceSpec.newBuilder().setCpuCores(0.4).setHeapMemoryInMB(400).build();
-		ResourceSpec resource5 = ResourceSpec.newBuilder().setCpuCores(0.5).setHeapMemoryInMB(500).build();
+		ResourceSpec resource1 = ResourceSpec.newBuilder(0.1, 100).build();
+		ResourceSpec resource2 = ResourceSpec.newBuilder(0.2, 200).build();
+		ResourceSpec resource3 = ResourceSpec.newBuilder(0.3, 300).build();
+		ResourceSpec resource4 = ResourceSpec.newBuilder(0.4, 400).build();
+		ResourceSpec resource5 = ResourceSpec.newBuilder(0.5, 500).build();
 
 		Method opMethod = SingleOutputStreamOperator.class.getDeclaredMethod("setResources", ResourceSpec.class);
 		opMethod.setAccessible(true);
@@ -257,7 +275,7 @@ public class StreamingJobGraphGeneratorTest extends TestLogger {
 		JobVertex sourceMapFilterVertex = jobGraph.getVerticesSortedTopologicallyFromSources().get(0);
 		JobVertex reduceSinkVertex = jobGraph.getVerticesSortedTopologicallyFromSources().get(1);
 
-		assertTrue(sourceMapFilterVertex.getMinResources().equals(resource1.merge(resource2).merge(resource3)));
+		assertTrue(sourceMapFilterVertex.getMinResources().equals(resource3.merge(resource2).merge(resource1)));
 		assertTrue(reduceSinkVertex.getPreferredResources().equals(resource4.merge(resource5)));
 	}
 
@@ -267,11 +285,11 @@ public class StreamingJobGraphGeneratorTest extends TestLogger {
 	 */
 	@Test
 	public void testResourcesForIteration() throws Exception {
-		ResourceSpec resource1 = ResourceSpec.newBuilder().setCpuCores(0.1).setHeapMemoryInMB(100).build();
-		ResourceSpec resource2 = ResourceSpec.newBuilder().setCpuCores(0.2).setHeapMemoryInMB(200).build();
-		ResourceSpec resource3 = ResourceSpec.newBuilder().setCpuCores(0.3).setHeapMemoryInMB(300).build();
-		ResourceSpec resource4 = ResourceSpec.newBuilder().setCpuCores(0.4).setHeapMemoryInMB(400).build();
-		ResourceSpec resource5 = ResourceSpec.newBuilder().setCpuCores(0.5).setHeapMemoryInMB(500).build();
+		ResourceSpec resource1 = ResourceSpec.newBuilder(0.1, 100).build();
+		ResourceSpec resource2 = ResourceSpec.newBuilder(0.2, 200).build();
+		ResourceSpec resource3 = ResourceSpec.newBuilder(0.3, 300).build();
+		ResourceSpec resource4 = ResourceSpec.newBuilder(0.4, 400).build();
+		ResourceSpec resource5 = ResourceSpec.newBuilder(0.5, 500).build();
 
 		Method opMethod = SingleOutputStreamOperator.class.getDeclaredMethod("setResources", ResourceSpec.class);
 		opMethod.setAccessible(true);
@@ -521,60 +539,6 @@ public class StreamingJobGraphGeneratorTest extends TestLogger {
 	}
 
 	/**
-	 * Test slot sharing group is enabled or disabled for iteration.
-	 */
-	@Test
-	public void testDisableSlotSharingForIteration() {
-		StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
-
-		DataStream<Integer> source = env.fromElements(1, 2, 3).name("source");
-		IterativeStream<Integer> iteration = source.iterate(3000);
-		iteration.name("iteration").setParallelism(2);
-		DataStream<Integer> map = iteration.map(x -> x + 1).name("map").setParallelism(2);
-		DataStream<Integer> filter = map.filter((x) -> false).name("filter").setParallelism(2);
-		iteration.closeWith(filter).print();
-
-		List<Transformation<?>> transformations = new ArrayList<>();
-		transformations.add(source.getTransformation());
-		transformations.add(iteration.getTransformation());
-		transformations.add(map.getTransformation());
-		transformations.add(filter.getTransformation());
-		// when slot sharing group is disabled
-		// all job vertices except iteration vertex would have no slot sharing group
-		// iteration vertices would be set slot sharing group automatically
-		StreamGraphGenerator generator = new StreamGraphGenerator(transformations, env.getConfig(), env.getCheckpointConfig());
-		generator.setSlotSharingEnabled(false);
-
-		JobGraph jobGraph = StreamingJobGraphGenerator.createJobGraph(generator.generate());
-
-		SlotSharingGroup iterationSourceSlotSharingGroup = null;
-		SlotSharingGroup iterationSinkSlotSharingGroup = null;
-
-		CoLocationGroup iterationSourceCoLocationGroup = null;
-		CoLocationGroup iterationSinkCoLocationGroup = null;
-
-		for (JobVertex jobVertex : jobGraph.getVertices()) {
-			if (jobVertex.getName().startsWith(StreamGraph.ITERATION_SOURCE_NAME_PREFIX)) {
-				iterationSourceSlotSharingGroup = jobVertex.getSlotSharingGroup();
-				iterationSourceCoLocationGroup = jobVertex.getCoLocationGroup();
-			} else if (jobVertex.getName().startsWith(StreamGraph.ITERATION_SINK_NAME_PREFIX)) {
-				iterationSinkSlotSharingGroup = jobVertex.getSlotSharingGroup();
-				iterationSinkCoLocationGroup = jobVertex.getCoLocationGroup();
-			} else {
-				assertNull(jobVertex.getSlotSharingGroup());
-			}
-		}
-
-		assertNotNull(iterationSourceSlotSharingGroup);
-		assertNotNull(iterationSinkSlotSharingGroup);
-		assertEquals(iterationSourceSlotSharingGroup, iterationSinkSlotSharingGroup);
-
-		assertNotNull(iterationSourceCoLocationGroup);
-		assertNotNull(iterationSinkCoLocationGroup);
-		assertEquals(iterationSourceCoLocationGroup, iterationSinkCoLocationGroup);
-	}
-
-	/**
 	 * Test default schedule mode.
 	 */
 	@Test
@@ -691,5 +655,87 @@ public class StreamingJobGraphGeneratorTest extends TestLogger {
 			.print();
 
 		StreamingJobGraphGenerator.createJobGraph(env.getStreamGraph());
+	}
+
+	@Test
+	public void testSlotSharingOnAllVerticesInSameSlotSharingGroupByDefaultEnabled() {
+		final StreamGraph streamGraph = createStreamGraphForSlotSharingTest();
+		// specify slot sharing group for map1
+		streamGraph.getStreamNodes().stream()
+			.filter(n -> "map1".equals(n.getOperatorName()))
+			.findFirst()
+			.get()
+			.setSlotSharingGroup("testSlotSharingGroup");
+		streamGraph.setAllVerticesInSameSlotSharingGroupByDefault(true);
+		final JobGraph jobGraph = StreamingJobGraphGenerator.createJobGraph(streamGraph);
+
+		final List<JobVertex> verticesSorted = jobGraph.getVerticesSortedTopologicallyFromSources();
+		assertEquals(4, verticesSorted.size());
+
+		final JobVertex source1Vertex = verticesSorted.get(0);
+		final JobVertex source2Vertex = verticesSorted.get(1);
+		final JobVertex map1Vertex = verticesSorted.get(2);
+		final JobVertex map2Vertex = verticesSorted.get(3);
+
+		// all vertices should be in the same default slot sharing group
+		// except for map1 which has a specified slot sharing group
+		assertSameSlotSharingGroup(source1Vertex, source2Vertex, map2Vertex);
+		assertDistinctSharingGroups(source1Vertex, map1Vertex);
+	}
+
+	@Test
+	public void testSlotSharingOnAllVerticesInSameSlotSharingGroupByDefaultDisabled() {
+		final StreamGraph streamGraph = createStreamGraphForSlotSharingTest();
+		streamGraph.setAllVerticesInSameSlotSharingGroupByDefault(false);
+		final JobGraph jobGraph = StreamingJobGraphGenerator.createJobGraph(streamGraph);
+
+		final List<JobVertex> verticesSorted = jobGraph.getVerticesSortedTopologicallyFromSources();
+		assertEquals(4, verticesSorted.size());
+
+		final JobVertex source1Vertex = verticesSorted.get(0);
+		final JobVertex source2Vertex = verticesSorted.get(1);
+		final JobVertex map1Vertex = verticesSorted.get(2);
+		final JobVertex map2Vertex = verticesSorted.get(3);
+
+		// vertices in the same region should be in the same slot sharing group
+		assertSameSlotSharingGroup(source1Vertex, map1Vertex);
+
+		// vertices in different regions should be in different slot sharing groups
+		assertDistinctSharingGroups(source1Vertex, source2Vertex, map2Vertex);
+	}
+
+	/**
+	 * Create a StreamGraph as below.
+	 *
+	 * <p>source1 --(rebalance & pipelined)--> Map1
+	 *
+	 * <p>source2 --(rebalance & blocking)--> Map2
+	 */
+	private StreamGraph createStreamGraphForSlotSharingTest() {
+		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+
+		final DataStream<Integer> source1 = env.fromElements(1, 2, 3).name("source1");
+		source1.rebalance().map(v -> v).name("map1");
+
+		final DataStream<Integer> source2 = env.fromElements(4, 5, 6).name("source2");
+		final DataStream<Integer> partitioned = new DataStream<>(env, new PartitionTransformation<>(
+			source2.getTransformation(), new RebalancePartitioner<>(), ShuffleMode.BATCH));
+		partitioned.map(v -> v).name("map2");
+
+		return env.getStreamGraph();
+	}
+
+	private void assertSameSlotSharingGroup(JobVertex... vertices) {
+		for (int i = 0; i < vertices.length - 1; i++) {
+			assertEquals(vertices[i].getSlotSharingGroup(), vertices[i + 1].getSlotSharingGroup());
+		}
+	}
+
+	private void assertDistinctSharingGroups(JobVertex... vertices) {
+		for (int i = 0; i < vertices.length - 1; i++) {
+			for (int j = i + 1; j < vertices.length; j++) {
+				assertNotEquals(vertices[i].getSlotSharingGroup(), vertices[j].getSlotSharingGroup());
+			}
+		}
 	}
 }

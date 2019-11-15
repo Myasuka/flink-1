@@ -21,15 +21,16 @@ package org.apache.flink.client.program;
 import org.apache.flink.api.common.ExecutionConfig;
 import org.apache.flink.api.common.InvalidProgramException;
 import org.apache.flink.api.common.JobExecutionResult;
-import org.apache.flink.api.common.JobSubmissionResult;
 import org.apache.flink.api.common.Plan;
 import org.apache.flink.api.java.ExecutionEnvironment;
-import org.apache.flink.optimizer.plan.OptimizedPlan;
-import org.apache.flink.optimizer.plandump.PlanJSONDumpGenerator;
+import org.apache.flink.client.ClientUtils;
+import org.apache.flink.client.FlinkPipelineTranslationUtil;
+import org.apache.flink.runtime.jobgraph.JobGraph;
 import org.apache.flink.runtime.jobgraph.SavepointRestoreSettings;
 
 import java.net.URL;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Execution Environment for remote execution with the Client.
@@ -48,10 +49,18 @@ public class ContextEnvironment extends ExecutionEnvironment {
 
 	private final SavepointRestoreSettings savepointSettings;
 
+	private final AtomicReference<JobExecutionResult> jobExecutionResult;
+
 	private boolean alreadyCalled;
 
-	public ContextEnvironment(ClusterClient<?> remoteConnection, List<URL> jarFiles, List<URL> classpaths,
-				ClassLoader userCodeClassLoader, SavepointRestoreSettings savepointSettings, boolean detached) {
+	public ContextEnvironment(
+		ClusterClient<?> remoteConnection,
+		List<URL> jarFiles,
+		List<URL> classpaths,
+		ClassLoader userCodeClassLoader,
+		SavepointRestoreSettings savepointSettings,
+		boolean detached,
+		AtomicReference<JobExecutionResult> jobExecutionResult) {
 		this.client = remoteConnection;
 		this.jarFilesToAttach = jarFiles;
 		this.classpathsToAttach = classpaths;
@@ -60,27 +69,33 @@ public class ContextEnvironment extends ExecutionEnvironment {
 
 		this.detached = detached;
 		this.alreadyCalled = false;
+
+		this.jobExecutionResult = jobExecutionResult;
 	}
 
 	@Override
 	public JobExecutionResult execute(String jobName) throws Exception {
 		verifyExecuteIsCalledOnceWhenInDetachedMode();
 
-		final Plan plan = createProgramPlan(jobName);
-		final JobWithJars job = new JobWithJars(plan, jarFilesToAttach, classpathsToAttach, userCodeClassLoader);
-		final JobSubmissionResult jobSubmissionResult = client.run(job, getParallelism(), savepointSettings);
+		Plan plan = createProgramPlan(jobName);
 
-		lastJobExecutionResult = jobSubmissionResult.getJobExecutionResult();
+		JobGraph jobGraph = FlinkPipelineTranslationUtil.getJobGraph(
+				plan,
+				client.getFlinkConfiguration(),
+				getParallelism());
+
+		jobGraph.addJars(this.jarFilesToAttach);
+		jobGraph.setClasspaths(this.classpathsToAttach);
+
+		if (detached) {
+			lastJobExecutionResult = ClientUtils.submitJob(client, jobGraph);
+		} else {
+			lastJobExecutionResult = ClientUtils.submitJobAndWaitForResult(client, jobGraph, userCodeClassLoader).getJobExecutionResult();
+		}
+
+		setJobExecutionResult(lastJobExecutionResult);
+
 		return lastJobExecutionResult;
-	}
-
-	@Override
-	public String getExecutionPlan() throws Exception {
-		Plan plan = createProgramPlan("unnamed job");
-
-		OptimizedPlan op = ClusterClient.getOptimizedPlan(client.compiler, plan, getParallelism());
-		PlanJSONDumpGenerator gen = new PlanJSONDumpGenerator();
-		return gen.getOptimizerPlanAsJSON(op);
 	}
 
 	private void verifyExecuteIsCalledOnceWhenInDetachedMode() {
@@ -88,6 +103,10 @@ public class ContextEnvironment extends ExecutionEnvironment {
 			throw new InvalidProgramException(DetachedJobExecutionResult.DETACHED_MESSAGE + DetachedJobExecutionResult.EXECUTE_TWICE_MESSAGE);
 		}
 		alreadyCalled = true;
+	}
+
+	public void setJobExecutionResult(JobExecutionResult jobExecutionResult) {
+		this.jobExecutionResult.set(jobExecutionResult);
 	}
 
 	@Override
@@ -115,13 +134,17 @@ public class ContextEnvironment extends ExecutionEnvironment {
 		return savepointSettings;
 	}
 
+	public boolean isDetached() {
+		return detached;
+	}
+
 	// --------------------------------------------------------------------------------------------
 
-	static void setAsContext(ContextEnvironmentFactory factory) {
+	public static void setAsContext(ContextEnvironmentFactory factory) {
 		initializeContextEnvironment(factory);
 	}
 
-	static void unsetContext() {
+	public static void unsetContext() {
 		resetContextEnvironment();
 	}
 }

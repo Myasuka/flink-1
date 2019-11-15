@@ -19,6 +19,7 @@
 package org.apache.flink.table.planner.plan.rules.logical
 
 import org.apache.flink.table.api.config.OptimizerConfigOptions
+import org.apache.flink.table.api.TableException
 import org.apache.flink.table.expressions.Expression
 import org.apache.flink.table.planner.calcite.FlinkContext
 import org.apache.flink.table.planner.expressions.converter.ExpressionConverter
@@ -83,7 +84,7 @@ class PushFilterIntoTableSourceScanRule extends RelOptRule(
       relOptTable: FlinkRelOptTable): Unit = {
 
     val relBuilder = call.builder()
-    val functionCatalog = call.getPlanner.getContext.asInstanceOf[FlinkContext].getFunctionCatalog
+    val context = call.getPlanner.getContext.asInstanceOf[FlinkContext]
     val maxCnfNodeCount = FlinkRelOptUtil.getMaxCnfNodeCount(scan)
     val (predicates, unconvertedRexNodes) =
       RexNodeExtractor.extractConjunctiveConditions(
@@ -91,7 +92,8 @@ class PushFilterIntoTableSourceScanRule extends RelOptRule(
         maxCnfNodeCount,
         filter.getInput.getRowType.getFieldNames,
         relBuilder.getRexBuilder,
-        functionCatalog,
+        context.getFunctionCatalog,
+        context.getCatalogManager,
         TimeZone.getTimeZone(scan.getCluster.getPlanner.getContext
             .asInstanceOf[FlinkContext].getTableConfig.getLocalTimeZone))
 
@@ -103,7 +105,17 @@ class PushFilterIntoTableSourceScanRule extends RelOptRule(
     val remainingPredicates = new util.LinkedList[Expression]()
     predicates.foreach(e => remainingPredicates.add(e))
 
-    val newRelOptTable = applyPredicate(remainingPredicates, relOptTable, relBuilder.getTypeFactory)
+    val newRelOptTable: FlinkRelOptTable = 
+      applyPredicate(remainingPredicates, relOptTable, relBuilder.getTypeFactory)
+    val newTableSource = newRelOptTable.unwrap(classOf[TableSourceTable[_]]).tableSource
+    val oldTableSource = relOptTable.unwrap(classOf[TableSourceTable[_]]).tableSource
+
+    if (newTableSource.asInstanceOf[FilterableTableSource[_]].isFilterPushedDown
+      && newTableSource.explainSource().equals(oldTableSource.explainSource)) {
+      throw new TableException("Failed to push filter into table source! "
+        + "table source with pushdown capability must override and change "
+        + "explainSource() API to explain the pushdown applied!")
+    }
 
     val newScan = new LogicalTableScan(scan.getCluster, scan.getTraitSet, newRelOptTable)
 
@@ -140,7 +152,10 @@ class PushFilterIntoTableSourceScanRule extends RelOptRule(
       FlinkStatistic.builder().statistic(statistic).tableStats(null).build()
     }
     val newTableSourceTable = new TableSourceTable(
-      newTableSource, tableSourceTable.isStreamingMode, newStatistic)
+      newTableSource,
+      tableSourceTable.isStreamingMode,
+      newStatistic,
+      tableSourceTable.catalogTable)
     relOptTable.copy(newTableSourceTable, tableSourceTable.getRowType(typeFactory))
   }
 

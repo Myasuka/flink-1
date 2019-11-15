@@ -25,10 +25,10 @@ import org.apache.flink.table.api.scala.{StreamTableEnvironment, _}
 import org.apache.flink.table.planner.utils.TableTestUtil
 
 import org.apache.calcite.plan.RelOptUtil
+import org.apache.calcite.sql.SqlExplainLevel
 import org.junit.Assert.assertEquals
 import org.junit.rules.ExpectedException
 import org.junit.{Rule, Test}
-
 
 class TableEnvironmentTest {
 
@@ -44,7 +44,7 @@ class TableEnvironmentTest {
   @Test
   def testScanNonExistTable(): Unit = {
     thrown.expect(classOf[ValidationException])
-    thrown.expectMessage("Table 'MyTable' was not found")
+    thrown.expectMessage("Table `MyTable` was not found")
     tableEnv.scan("MyTable")
   }
 
@@ -60,7 +60,8 @@ class TableEnvironmentTest {
 
     // register on a conflict name
     thrown.expect(classOf[ValidationException])
-    thrown.expectMessage("Could not execute CreateTable in path")
+    thrown.expectMessage(
+      "Temporary table `default_catalog`.`default_database`.`MyTable` already exists")
     tableEnv.registerDataStream("MyTable", env.fromElements[(Int, Long)]())
   }
 
@@ -70,9 +71,9 @@ class TableEnvironmentTest {
     tableEnv.registerTable("MyTable", table)
     val queryTable = tableEnv.sqlQuery("SELECT a, c, d FROM MyTable")
     val relNode = TableTestUtil.toRelNode(queryTable)
-    val actual = RelOptUtil.toString(relNode)
-    val expected = "LogicalProject(a=[$0], c=[$2], d=[$3])\n" +
-      "  LogicalTableScan(table=[[default_catalog, default_database, MyTable]])\n"
+    val actual = RelOptUtil.toString(relNode, SqlExplainLevel.NO_ATTRIBUTES)
+    val expected = "LogicalProject\n" +
+      "  LogicalTableScan\n"
     assertEquals(expected, actual)
   }
 }

@@ -20,19 +20,20 @@ package org.apache.flink.table.client.gateway.local;
 
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.client.ClientUtils;
 import org.apache.flink.client.cli.CliFrontend;
 import org.apache.flink.client.cli.CliFrontendParser;
 import org.apache.flink.client.cli.CustomCommandLine;
+import org.apache.flink.client.deployment.ClusterClientServiceLoader;
 import org.apache.flink.client.deployment.ClusterDescriptor;
+import org.apache.flink.client.deployment.DefaultClusterClientServiceLoader;
 import org.apache.flink.client.program.ClusterClient;
-import org.apache.flink.client.program.JobWithJars;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.GlobalConfiguration;
 import org.apache.flink.core.fs.FileSystem;
 import org.apache.flink.core.fs.Path;
 import org.apache.flink.core.plugin.PluginUtils;
 import org.apache.flink.runtime.jobgraph.JobGraph;
-import org.apache.flink.table.api.EnvironmentSettings;
 import org.apache.flink.table.api.QueryConfig;
 import org.apache.flink.table.api.StreamQueryConfig;
 import org.apache.flink.table.api.Table;
@@ -73,6 +74,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import static org.apache.flink.util.Preconditions.checkNotNull;
+
 /**
  * Executor that performs the Flink communication locally. The calls are blocking depending on the
  * response time to the Flink cluster. Flink jobs are not blocking.
@@ -85,10 +88,11 @@ public class LocalExecutor implements Executor {
 
 	// deployment
 
+	private final ClusterClientServiceLoader clusterClientServiceLoader;
 	private final Environment defaultEnvironment;
 	private final List<URL> dependencies;
 	private final Configuration flinkConfig;
-	private final List<CustomCommandLine<?>> commandLines;
+	private final List<CustomCommandLine> commandLines;
 	private final Options commandLineOptions;
 
 	// result maintenance
@@ -160,12 +164,14 @@ public class LocalExecutor implements Executor {
 
 		// prepare result store
 		resultStore = new ResultStore(flinkConfig);
+
+		clusterClientServiceLoader = new DefaultClusterClientServiceLoader();
 	}
 
 	/**
 	 * Constructor for testing purposes.
 	 */
-	public LocalExecutor(Environment defaultEnvironment, List<URL> dependencies, Configuration flinkConfig, CustomCommandLine<?> commandLine) {
+	public LocalExecutor(Environment defaultEnvironment, List<URL> dependencies, Configuration flinkConfig, CustomCommandLine commandLine, ClusterClientServiceLoader clusterClientServiceLoader) {
 		this.defaultEnvironment = defaultEnvironment;
 		this.dependencies = dependencies;
 		this.flinkConfig = flinkConfig;
@@ -173,7 +179,8 @@ public class LocalExecutor implements Executor {
 		this.commandLineOptions = collectCommandLineOptions(commandLines);
 
 		// prepare result store
-		resultStore = new ResultStore(flinkConfig);
+		this.resultStore = new ResultStore(flinkConfig);
+		this.clusterClientServiceLoader = checkNotNull(clusterClientServiceLoader);
 	}
 
 	@Override
@@ -239,6 +246,15 @@ public class LocalExecutor implements Executor {
 			.createEnvironmentInstance()
 			.getTableEnvironment();
 		return context.wrapClassLoader(() -> Arrays.asList(tableEnv.listFunctions()));
+	}
+
+	@Override
+	public List<String> listModules(SessionContext session) throws SqlExecutionException {
+		final ExecutionContext<?> context = getOrCreateExecutionContext(session);
+		final TableEnvironment tableEnv = context
+			.createEnvironmentInstance()
+			.getTableEnvironment();
+		return context.wrapClassLoader(() -> Arrays.asList(tableEnv.listModules()));
 	}
 
 	@Override
@@ -422,7 +438,7 @@ public class LocalExecutor implements Executor {
 				// retrieve existing cluster
 				clusterClient = clusterDescriptor.retrieve(context.getClusterId());
 				try {
-					clusterClient.cancel(new JobID(StringUtils.hexStringToByte(resultId)));
+					clusterClient.cancel(new JobID(StringUtils.hexStringToByte(resultId))).get();
 				} catch (Throwable t) {
 					// the job might has finished earlier
 				}
@@ -494,8 +510,6 @@ public class LocalExecutor implements Executor {
 				envInst.getTableEnvironment().registerTableSink(jobName, result.getTableSink());
 				table.insertInto(
 					envInst.getQueryConfig(),
-					EnvironmentSettings.DEFAULT_BUILTIN_CATALOG,
-					EnvironmentSettings.DEFAULT_BUILTIN_DATABASE,
 					jobName);
 				return null;
 			});
@@ -565,7 +579,7 @@ public class LocalExecutor implements Executor {
 		if (executionContext == null || !executionContext.getSessionContext().equals(session)) {
 			try {
 				executionContext = new ExecutionContext<>(defaultEnvironment, session, dependencies,
-					flinkConfig, commandLineOptions, commandLines);
+					flinkConfig, clusterClientServiceLoader, commandLineOptions, commandLines);
 			} catch (Throwable t) {
 				// catch everything such that a configuration does not crash the executor
 				throw new SqlExecutionException("Could not create execution context.", t);
@@ -581,7 +595,7 @@ public class LocalExecutor implements Executor {
 		try {
 			// find jar files
 			for (URL url : jars) {
-				JobWithJars.checkJarFile(url);
+				ClientUtils.checkJarFile(url);
 				dependencies.add(url);
 			}
 
@@ -601,7 +615,7 @@ public class LocalExecutor implements Executor {
 					// only consider jars
 					if (f.isFile() && f.getAbsolutePath().toLowerCase().endsWith(".jar")) {
 						final URL url = f.toURI().toURL();
-						JobWithJars.checkJarFile(url);
+						ClientUtils.checkJarFile(url);
 						dependencies.add(url);
 					}
 				}
@@ -617,9 +631,9 @@ public class LocalExecutor implements Executor {
 		return dependencies;
 	}
 
-	private static Options collectCommandLineOptions(List<CustomCommandLine<?>> commandLines) {
+	private static Options collectCommandLineOptions(List<CustomCommandLine> commandLines) {
 		final Options customOptions = new Options();
-		for (CustomCommandLine<?> customCommandLine : commandLines) {
+		for (CustomCommandLine customCommandLine : commandLines) {
 			customCommandLine.addRunOptions(customOptions);
 		}
 		return CliFrontendParser.mergeOptions(

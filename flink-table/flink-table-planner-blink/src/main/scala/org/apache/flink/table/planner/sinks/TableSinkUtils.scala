@@ -38,31 +38,36 @@ object TableSinkUtils {
     * @param sinkIdentifier Tha path of the sink. It is needed just for logging. It does not
     *                      participate in the validation.
     * @param sink     The sink that we want to write to.
+    * @param partitionKeys The partition keys of this table.
     */
   def validateSink(
       sinkOperation: CatalogSinkModifyOperation,
       sinkIdentifier: ObjectIdentifier,
-      sink: TableSink[_]): Unit = {
+      sink: TableSink[_],
+      partitionKeys: Seq[String]): Unit = {
     val query = sinkOperation.getChild
     // validate schema of source table and table sink
     val srcFieldTypes = query.getTableSchema.getFieldDataTypes
     val sinkFieldTypes = sink.getTableSchema.getFieldDataTypes
 
-    if (srcFieldTypes.length != sinkFieldTypes.length ||
-      srcFieldTypes.zip(sinkFieldTypes).exists { case (srcF, snkF) =>
-        !PlannerTypeUtils.isInteroperable(
-          fromDataTypeToLogicalType(srcF), fromDataTypeToLogicalType(snkF))
+    val srcLogicalTypes = srcFieldTypes.map(t => fromDataTypeToLogicalType(t))
+    val sinkLogicalTypes = sinkFieldTypes.map(t => fromDataTypeToLogicalType(t))
+
+    if (srcLogicalTypes.length != sinkLogicalTypes.length ||
+      srcLogicalTypes.zip(sinkLogicalTypes).exists {
+        case (srcType, sinkType) =>
+          !PlannerTypeUtils.isInteroperable(srcType, sinkType)
       }) {
 
       val srcFieldNames = query.getTableSchema.getFieldNames
       val sinkFieldNames = sink.getTableSchema.getFieldNames
 
       // format table and table sink schema strings
-      val srcSchema = srcFieldNames.zip(srcFieldTypes)
-        .map { case (n, t) => s"$n: ${t.getConversionClass.getSimpleName}" }
+      val srcSchema = srcFieldNames.zip(srcLogicalTypes)
+        .map { case (n, t) => s"$n: $t" }
         .mkString("[", ", ", "]")
-      val sinkSchema = sinkFieldNames.zip(sinkFieldTypes)
-        .map { case (n, t) => s"$n: ${t.getConversionClass.getSimpleName}" }
+      val sinkSchema = sinkFieldNames.zip(sinkLogicalTypes)
+        .map { case (n, t) => s"$n: $t" }
         .mkString("[", ", ", "]")
 
       throw new ValidationException(
@@ -73,33 +78,21 @@ object TableSinkUtils {
     }
 
     // check partitions are valid
+    if (partitionKeys.nonEmpty) {
+      sink match {
+        case _: PartitionableTableSink =>
+        case _ => throw new ValidationException("We need PartitionableTableSink to write data to" +
+            s" partitioned table: $sinkIdentifier")
+      }
+    }
+
     val staticPartitions = sinkOperation.getStaticPartitions
     if (staticPartitions != null && !staticPartitions.isEmpty) {
-      val invalidMsg = "Can't insert static partitions into a non-partitioned table sink. " +
-        "A partitioned sink should implement 'PartitionableTableSink' and return partition " +
-        "field names via 'getPartitionFieldNames()' method."
-      sink match {
-        case pts: PartitionableTableSink =>
-          val partitionFields = pts.getPartitionFieldNames
-          if (partitionFields == null || partitionFields.isEmpty) {
-            throw new ValidationException(invalidMsg)
-          }
-          staticPartitions.map(_._1) foreach { p =>
-            if (!partitionFields.contains(p)) {
-              throw new ValidationException(s"Static partition column $p " +
-                s"should be in the partition fields list $partitionFields.")
-            }
-          }
-          staticPartitions.map(_._1).zip(partitionFields).foreach {
-            case (p1, p2) =>
-              if (p1 != p2) {
-                throw new ValidationException(s"Static partition column $p1 " +
-                  s"should appear before dynamic partition $p2.")
-              }
-          }
-        case _ =>
-          throw new ValidationException(invalidMsg)
-
+      staticPartitions.map(_._1) foreach { p =>
+        if (!partitionKeys.contains(p)) {
+          throw new ValidationException(s"Static partition column $p should be in the partition" +
+              s" fields list $partitionKeys for Table($sinkIdentifier).")
+        }
       }
     }
   }

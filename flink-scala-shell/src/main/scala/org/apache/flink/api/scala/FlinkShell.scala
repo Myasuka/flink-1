@@ -22,7 +22,7 @@ import java.io._
 import java.net.URL
 
 import org.apache.flink.client.cli.{CliFrontend, CliFrontendParser}
-import org.apache.flink.client.deployment.ClusterDescriptor
+import org.apache.flink.client.deployment.{ClusterDescriptor, DefaultClusterClientServiceLoader}
 import org.apache.flink.client.program.ClusterClient
 import org.apache.flink.configuration.{Configuration, GlobalConfiguration, JobManagerOptions}
 import org.apache.flink.runtime.minicluster.{MiniCluster, MiniClusterConfiguration}
@@ -49,7 +49,6 @@ object FlinkShell {
 
   /** YARN configuration object */
   case class YarnConfig(
-    containers: Option[Int] = None,
     jobManagerMemory: Option[String] = None,
     name: Option[String] = None,
     queue: Option[String] = None,
@@ -93,10 +92,6 @@ object FlinkShell {
       cmd("yarn") action {
         (_, c) => c.copy(executionMode = ExecutionMode.YARN, yarnConfig = None)
       } text "Starts Flink scala shell connecting to a yarn cluster" children(
-        opt[Int]("container") abbr ("n") valueName ("arg") action {
-          (x, c) =>
-            c.copy(yarnConfig = Some(ensureYarnConfig(c).copy(containers = Some(x))))
-        } text "Number of YARN container to allocate (= Number of TaskManagers)",
         opt[String]("jobManagerMemory") abbr ("jm") valueName ("arg") action {
           (x, c) =>
             c.copy(yarnConfig = Some(ensureYarnConfig(c).copy(jobManagerMemory = Some(x))))
@@ -247,13 +242,6 @@ object FlinkShell {
       "-m", "yarn-cluster"
     )
 
-    // number of task managers is required.
-    yarnConfig.containers match {
-      case Some(containers) => args ++= Seq("-yn", containers.toString)
-      case None =>
-        throw new IllegalArgumentException("Number of taskmanagers must be specified.")
-    }
-
     // set configuration from user input
     yarnConfig.jobManagerMemory.foreach((jmMem) => args ++= Seq("-yjm", jmMem.toString))
     yarnConfig.taskManagerMemory.foreach((tmMem) => args ++= Seq("-ytm", tmMem.toString))
@@ -270,10 +258,12 @@ object FlinkShell {
     val commandLine = CliFrontendParser.parse(commandLineOptions, args.toArray, true)
 
     val customCLI = frontend.getActiveCustomCommandLine(commandLine)
+    val executorConfig = customCLI.applyCommandLineOptionsToConfiguration(commandLine)
 
-    val clusterDescriptor = customCLI.createClusterDescriptor(commandLine)
-
-    val clusterSpecification = customCLI.getClusterSpecification(commandLine)
+    val serviceLoader = new DefaultClusterClientServiceLoader
+    val clientFactory = serviceLoader.getClusterClientFactory(executorConfig)
+    val clusterDescriptor = clientFactory.createClusterDescriptor(executorConfig)
+    val clusterSpecification = clientFactory.getClusterSpecification(executorConfig)
 
     val cluster = clusterDescriptor.deploySessionCluster(clusterSpecification)
 
@@ -300,12 +290,14 @@ object FlinkShell {
       configuration,
       CliFrontend.loadCustomCommandLines(configuration, configurationDirectory))
     val customCLI = frontend.getActiveCustomCommandLine(commandLine)
+    val executorConfig = customCLI.applyCommandLineOptionsToConfiguration(commandLine);
 
-    val clusterDescriptor = customCLI
-      .createClusterDescriptor(commandLine)
+    val serviceLoader = new DefaultClusterClientServiceLoader
+    val clientFactory = serviceLoader.getClusterClientFactory(executorConfig)
+    val clusterDescriptor = clientFactory
+      .createClusterDescriptor(executorConfig)
       .asInstanceOf[ClusterDescriptor[Any]]
-
-    val clusterId = customCLI.getClusterId(commandLine)
+    val clusterId = clientFactory.getClusterId(executorConfig)
 
     val cluster = clusterDescriptor.retrieve(clusterId)
 

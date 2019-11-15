@@ -50,7 +50,13 @@ import org.apache.flink.api.java.typeutils.TypeExtractor;
 import org.apache.flink.api.java.typeutils.ValueTypeInfo;
 import org.apache.flink.api.java.typeutils.runtime.kryo.Serializers;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.configuration.CoreOptions;
+import org.apache.flink.configuration.DeploymentOptions;
 import org.apache.flink.configuration.RestOptions;
+import org.apache.flink.core.execution.DefaultExecutorServiceLoader;
+import org.apache.flink.core.execution.Executor;
+import org.apache.flink.core.execution.ExecutorFactory;
+import org.apache.flink.core.execution.ExecutorServiceLoader;
 import org.apache.flink.core.fs.Path;
 import org.apache.flink.types.StringValue;
 import org.apache.flink.util.NumberSequenceIterator;
@@ -94,7 +100,7 @@ import static org.apache.flink.util.Preconditions.checkNotNull;
  * @see RemoteEnvironment
  */
 @Public
-public abstract class ExecutionEnvironment {
+public class ExecutionEnvironment {
 
 	/** The logger used by the environment and its subclasses. */
 	protected static final Logger LOG = LoggerFactory.getLogger(ExecutionEnvironment.class);
@@ -122,11 +128,28 @@ public abstract class ExecutionEnvironment {
 	/** Flag to indicate whether sinks have been cleared in previous executions. */
 	private boolean wasExecuted = false;
 
+	private final ExecutorServiceLoader executorServiceLoader;
+
+	private final Configuration configuration;
+
 	/**
 	 * Creates a new Execution Environment.
 	 */
 	protected ExecutionEnvironment() {
+		this(new Configuration());
+	}
 
+	protected ExecutionEnvironment(final Configuration executorConfiguration) {
+		this(new DefaultExecutorServiceLoader(), executorConfiguration);
+	}
+
+	protected ExecutionEnvironment(final ExecutorServiceLoader executorServiceLoader, final Configuration executorConfiguration) {
+		this.executorServiceLoader = checkNotNull(executorServiceLoader);
+		this.configuration = checkNotNull(executorConfiguration);
+	}
+
+	protected Configuration getConfiguration() {
+		return this.configuration;
 	}
 
 	// --------------------------------------------------------------------------------------------
@@ -761,18 +784,45 @@ public abstract class ExecutionEnvironment {
 	 * @return The result of the job execution, containing elapsed time and accumulators.
 	 * @throws Exception Thrown, if the program executions fails.
 	 */
-	public abstract JobExecutionResult execute(String jobName) throws Exception;
+	public JobExecutionResult execute(String jobName) throws Exception {
+		if (configuration.get(DeploymentOptions.TARGET) == null) {
+			throw new RuntimeException("No execution.target specified in your configuration file.");
+		}
+
+		consolidateParallelismDefinitionsInConfiguration();
+
+		final Plan plan = createProgramPlan(jobName);
+		final ExecutorFactory executorFactory =
+				executorServiceLoader.getExecutorFactory(configuration);
+
+		final Executor executor = executorFactory.getExecutor(configuration);
+		lastJobExecutionResult = executor.execute(plan, configuration);
+		return lastJobExecutionResult;
+	}
+
+	private void consolidateParallelismDefinitionsInConfiguration() {
+		final int execParallelism = getParallelism();
+		if (execParallelism == ExecutionConfig.PARALLELISM_DEFAULT) {
+			return;
+		}
+
+		// if parallelism is set in the ExecutorConfig, then
+		// that value takes precedence over any other value.
+
+		configuration.set(CoreOptions.DEFAULT_PARALLELISM, execParallelism);
+	}
 
 	/**
 	 * Creates the plan with which the system will execute the program, and returns it as
 	 * a String using a JSON representation of the execution data flow graph.
-	 * Note that this needs to be called, before the plan is executed.
 	 *
 	 * @return The execution plan of the program, as a JSON String.
-	 * @throws Exception Thrown, if the compiler could not be instantiated, or the master could not
-	 *                   be contacted to retrieve information relevant to the execution planning.
+	 * @throws Exception Thrown, if the compiler could not be instantiated.
 	 */
-	public abstract String getExecutionPlan() throws Exception;
+	public String getExecutionPlan() throws Exception {
+		Plan p = createProgramPlan(getDefaultName(), false);
+		return ExecutionPlanUtil.getExecutionPlanAsJSON(p);
+	}
 
 	/**
 	 * Registers a file at the distributed cache under the given name. The file will be accessible
@@ -836,7 +886,7 @@ public abstract class ExecutionEnvironment {
 	 */
 	@Internal
 	public Plan createProgramPlan() {
-		return createProgramPlan(null);
+		return createProgramPlan(getDefaultName());
 	}
 
 	/**
@@ -868,6 +918,8 @@ public abstract class ExecutionEnvironment {
 	 */
 	@Internal
 	public Plan createProgramPlan(String jobName, boolean clearSinks) {
+		checkNotNull(jobName);
+
 		if (this.sinks.isEmpty()) {
 			if (wasExecuted) {
 				throw new RuntimeException("No new data sinks have been defined since the " +
@@ -878,10 +930,6 @@ public abstract class ExecutionEnvironment {
 						"A program needs at least one sink that consumes data. " +
 						"Examples are writing the data set or printing it.");
 			}
-		}
-
-		if (jobName == null) {
-			jobName = getDefaultName();
 		}
 
 		OperatorTranslation translator = new OperatorTranslation();

@@ -144,8 +144,8 @@ function install_wget() {
 # some pakcages including checks such as tox and flake8.
 
 function install_miniconda() {
-    OS_TO_CONDA_URL=("https://repo.continuum.io/miniconda/Miniconda3-latest-MacOSX-x86_64.sh" \
-        "https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh")
+    OS_TO_CONDA_URL=("https://repo.continuum.io/miniconda/Miniconda3-4.7.10-MacOSX-x86_64.sh" \
+        "https://repo.continuum.io/miniconda/Miniconda3-4.7.10-Linux-x86_64.sh")
     print_function "STEP" "download miniconda..."
     if [ ! -f "$CONDA_INSTALL" ]; then
         download ${OS_TO_CONDA_URL[$1]} $CONDA_INSTALL_SH
@@ -178,7 +178,7 @@ function install_miniconda() {
 
 # Install some kinds of py env.
 function install_py_env() {
-    py_env=("2.7" "3.5" "3.6" "3.7")
+    py_env=("3.5" "3.6" "3.7")
     for ((i=0;i<${#py_env[@]};i++)) do
         if [ -d "$CURRENT_DIR/.conda/envs/${py_env[i]}" ]; then
             rm -rf "$CURRENT_DIR/.conda/envs/${py_env[i]}"
@@ -204,20 +204,21 @@ function install_py_env() {
 # In some situations,you need to run the script with "sudo". e.g. sudo ./lint-python.sh
 function install_tox() {
     if [ -f "$TOX_PATH" ]; then
-        $CONDA_PATH remove -p $CONDA_HOME tox -y -q 2>&1 >/dev/null
+        $PIP_PATH uninstall tox -y -q 2>&1 >/dev/null
         if [ $? -ne 0 ]; then
-            echo "conda remove tox failed \
+            echo "pip uninstall tox failed \
             please try to exec the script again.\
             if failed many times, you can try to exec in the form of sudo ./lint-python.sh -f"
             exit 1
         fi
     fi
 
-    # virtualenv 16.6.2 released in 2019-07-14 is incompatible with py27 and py34,
-    # force install an older version(16.0.0) to avoid this problem.
-    $CONDA_PATH install -p $CONDA_HOME -c conda-forge virtualenv=16.0.0 tox -y -q 2>&1 >/dev/null
+    # tox 3.14.0 depends on both 0.19 and 0.23 of importlib_metadata at the same time and
+    # conda will try to install both these two versions and it will cause problems occasionally.
+    # Using pip as the package manager could avoid this problem.
+    $PIP_PATH install -q virtualenv==16.0.0 tox==3.14.0 2>&1 >/dev/null
     if [ $? -ne 0 ]; then
-        echo "conda install tox failed \
+        echo "pip install tox failed \
         please try to exec the script again.\
         if failed many times, you can try to exec in the form of sudo ./lint-python.sh -f"
         exit 1
@@ -301,7 +302,7 @@ function install_environment() {
     print_function "STEP" "install miniconda... [SUCCESS]"
 
     # step-3 install python environment whcih includes
-    # 2.7 3.3 3.4 3.5 3.6 3.7
+    # 3.5 3.6 3.7
     print_function "STEP" "installing python environment..."
     if [ $STEP -lt 3 ]; then
         install_py_env
@@ -536,6 +537,9 @@ CONDA_HOME=$CURRENT_DIR/.conda
 
 # conda path
 CONDA_PATH=$CONDA_HOME/bin/conda
+
+# pip path
+PIP_PATH=$CONDA_HOME/bin/pip
 
 # tox path
 TOX_PATH=$CONDA_HOME/bin/tox

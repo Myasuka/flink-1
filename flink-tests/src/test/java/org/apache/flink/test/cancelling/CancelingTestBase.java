@@ -20,6 +20,7 @@ package org.apache.flink.test.cancelling;
 
 import org.apache.flink.api.common.JobSubmissionResult;
 import org.apache.flink.api.common.Plan;
+import org.apache.flink.client.ClientUtils;
 import org.apache.flink.client.program.ClusterClient;
 import org.apache.flink.configuration.AkkaOptions;
 import org.apache.flink.configuration.Configuration;
@@ -35,10 +36,12 @@ import org.apache.flink.runtime.jobgraph.JobStatus;
 import org.apache.flink.runtime.testingUtils.TestingUtils;
 import org.apache.flink.runtime.testutils.MiniClusterResourceConfiguration;
 import org.apache.flink.test.util.MiniClusterWithClientResource;
+import org.apache.flink.testutils.junit.category.AlsoRunWithSchedulerNG;
 import org.apache.flink.util.TestLogger;
 
 import org.junit.Assert;
 import org.junit.ClassRule;
+import org.junit.experimental.categories.Category;
 
 import java.util.concurrent.TimeUnit;
 
@@ -48,6 +51,7 @@ import scala.concurrent.duration.FiniteDuration;
 /**
  * Base class for testing job cancellation.
  */
+@Category(AlsoRunWithSchedulerNG.class)
 public abstract class CancelingTestBase extends TestLogger {
 
 	private static final int MINIMUM_HEAP_SIZE_MB = 192;
@@ -92,9 +96,7 @@ public abstract class CancelingTestBase extends TestLogger {
 		final JobGraph jobGraph = getJobGraph(plan);
 
 		ClusterClient<?> client = CLUSTER.getClusterClient();
-		client.setDetached(true);
-
-		JobSubmissionResult jobSubmissionResult = client.submitJob(jobGraph, CancelingTestBase.class.getClassLoader());
+		JobSubmissionResult jobSubmissionResult = ClientUtils.submitJob(client, jobGraph);
 
 		Deadline submissionDeadLine = new FiniteDuration(2, TimeUnit.MINUTES).fromNow();
 
@@ -109,7 +111,7 @@ public abstract class CancelingTestBase extends TestLogger {
 
 		Thread.sleep(msecsTillCanceling);
 
-		client.cancel(jobSubmissionResult.getJobID());
+		client.cancel(jobSubmissionResult.getJobID()).get();
 
 		Deadline cancelDeadline = new FiniteDuration(maxTimeTillCanceled, TimeUnit.MILLISECONDS).fromNow();
 

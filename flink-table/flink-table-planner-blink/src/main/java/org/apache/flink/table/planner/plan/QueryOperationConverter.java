@@ -22,6 +22,7 @@ import org.apache.flink.annotation.Internal;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.table.api.TableException;
 import org.apache.flink.table.api.TableSchema;
+import org.apache.flink.table.catalog.ConnectorCatalogTable;
 import org.apache.flink.table.catalog.FunctionLookup;
 import org.apache.flink.table.catalog.ObjectIdentifier;
 import org.apache.flink.table.expressions.CallExpression;
@@ -33,6 +34,7 @@ import org.apache.flink.table.expressions.ValueLiteralExpression;
 import org.apache.flink.table.expressions.resolver.LookupCallResolver;
 import org.apache.flink.table.functions.BuiltInFunctionDefinitions;
 import org.apache.flink.table.functions.FunctionDefinition;
+import org.apache.flink.table.functions.FunctionIdentifier;
 import org.apache.flink.table.functions.TableFunction;
 import org.apache.flink.table.operations.AggregateQueryOperation;
 import org.apache.flink.table.operations.CalculatedQueryOperation;
@@ -92,8 +94,10 @@ import org.apache.calcite.tools.RelBuilder;
 import org.apache.calcite.tools.RelBuilder.AggCall;
 import org.apache.calcite.tools.RelBuilder.GroupKey;
 
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -276,7 +280,7 @@ public class QueryOperationConverter extends QueryOperationDefaultVisitor<RelNod
 			FlinkTypeFactory typeFactory = relBuilder.getTypeFactory();
 
 			TableSqlFunction sqlFunction = new TableSqlFunction(
-					tableFunction.functionIdentifier(),
+					FunctionIdentifier.of(tableFunction.functionIdentifier()),
 					tableFunction.toString(),
 					tableFunction,
 					resultType,
@@ -297,7 +301,7 @@ public class QueryOperationConverter extends QueryOperationDefaultVisitor<RelNod
 
 		@Override
 		public RelNode visit(CatalogQueryOperation catalogTable) {
-			ObjectIdentifier objectIdentifier = catalogTable.getObjectIdentifier();
+			ObjectIdentifier objectIdentifier = catalogTable.getTableIdentifier();
 			return relBuilder.scan(
 				objectIdentifier.getCatalogName(),
 				objectIdentifier.getDatabaseName(),
@@ -316,13 +320,15 @@ public class QueryOperationConverter extends QueryOperationDefaultVisitor<RelNod
 				return convertToDataStreamScan(
 					dataStreamQueryOperation.getDataStream(),
 					dataStreamQueryOperation.getFieldIndices(),
-					dataStreamQueryOperation.getTableSchema());
+					dataStreamQueryOperation.getTableSchema(),
+					dataStreamQueryOperation.getIdentifier());
 			} else if (other instanceof ScalaDataStreamQueryOperation) {
 				ScalaDataStreamQueryOperation dataStreamQueryOperation = (ScalaDataStreamQueryOperation<?>) other;
 				return convertToDataStreamScan(
 					dataStreamQueryOperation.getDataStream(),
 					dataStreamQueryOperation.getFieldIndices(),
-					dataStreamQueryOperation.getTableSchema());
+					dataStreamQueryOperation.getTableSchema(),
+					dataStreamQueryOperation.getIdentifier());
 			}
 
 			throw new TableException("Unknown table operation: " + other);
@@ -343,9 +349,13 @@ public class QueryOperationConverter extends QueryOperationDefaultVisitor<RelNod
 			FlinkStatistic statistic;
 			List<String> names;
 			if (tableSourceOperation instanceof RichTableSourceQueryOperation &&
-				((RichTableSourceQueryOperation<U>) tableSourceOperation).getQualifiedName() != null) {
+				((RichTableSourceQueryOperation<U>) tableSourceOperation).getIdentifier() != null) {
+				ObjectIdentifier identifier = ((RichTableSourceQueryOperation<U>) tableSourceOperation).getIdentifier();
 				statistic = ((RichTableSourceQueryOperation<U>) tableSourceOperation).getStatistic();
-				names = ((RichTableSourceQueryOperation<U>) tableSourceOperation).getQualifiedName();
+				names = Arrays.asList(
+					identifier.getCatalogName(),
+					identifier.getDatabaseName(),
+					identifier.getObjectName());
 			} else {
 				statistic = FlinkStatistic.UNKNOWN();
 				// TableSourceScan requires a unique name of a Table for computing a digest.
@@ -354,7 +364,8 @@ public class QueryOperationConverter extends QueryOperationDefaultVisitor<RelNod
 				names = Collections.singletonList(refId);
 			}
 
-			TableSourceTable<?> tableSourceTable = new TableSourceTable<>(tableSource, !isBatch, statistic);
+			TableSourceTable<?> tableSourceTable = new TableSourceTable<>(
+					tableSource, !isBatch, statistic, ConnectorCatalogTable.source(tableSource, isBatch));
 			FlinkRelOptTable table = FlinkRelOptTable.create(
 				relBuilder.getRelOptSchema(),
 				tableSourceTable.getRowType(relBuilder.getTypeFactory()),
@@ -374,8 +385,12 @@ public class QueryOperationConverter extends QueryOperationDefaultVisitor<RelNod
 					scala.Option.apply(operation.getFieldNullables()));
 
 			List<String> names;
-			if (operation.getQualifiedName() != null) {
-				names = operation.getQualifiedName();
+			ObjectIdentifier identifier = operation.getIdentifier();
+			if (identifier != null) {
+				names = Arrays.asList(
+					identifier.getCatalogName(),
+					identifier.getDatabaseName(),
+					identifier.getObjectName());
 			} else {
 				String refId = String.format("Unregistered_DataStream_%s", operation.getDataStream().getId());
 				names = Collections.singletonList(refId);
@@ -389,7 +404,11 @@ public class QueryOperationConverter extends QueryOperationDefaultVisitor<RelNod
 			return LogicalTableScan.create(relBuilder.getCluster(), table);
 		}
 
-		private RelNode convertToDataStreamScan(DataStream<?> dataStream, int[] fieldIndices, TableSchema tableSchema) {
+		private RelNode convertToDataStreamScan(
+				DataStream<?> dataStream,
+				int[] fieldIndices,
+				TableSchema tableSchema,
+				Optional<ObjectIdentifier> identifier) {
 			DataStreamTable<?> dataStreamTable = new DataStreamTable<>(
 				dataStream,
 				false,
@@ -399,11 +418,20 @@ public class QueryOperationConverter extends QueryOperationDefaultVisitor<RelNod
 				FlinkStatistic.UNKNOWN(),
 				scala.Option.empty());
 
-			String refId = String.format("Unregistered_DataStream_%s", dataStream.getId());
+			List<String> names;
+			if (identifier.isPresent()) {
+				names = Arrays.asList(
+					identifier.get().getCatalogName(),
+					identifier.get().getDatabaseName(),
+					identifier.get().getObjectName());
+			} else {
+				String refId = String.format("Unregistered_DataStream_%s", dataStream.getId());
+				names = Collections.singletonList(refId);
+			}
 			FlinkRelOptTable table = FlinkRelOptTable.create(
 				relBuilder.getRelOptSchema(),
 				dataStreamTable.getRowType(relBuilder.getTypeFactory()),
-				Collections.singletonList(refId),
+				names,
 				dataStreamTable);
 			return LogicalTableScan.create(relBuilder.getCluster(), table);
 		}
@@ -471,9 +499,15 @@ public class QueryOperationConverter extends QueryOperationDefaultVisitor<RelNod
 				return new RexNodeExpression(convertedNode, ((ResolvedExpression) expr).getOutputDataType());
 			}).collect(Collectors.toList());
 
-			CallExpression newCall = new CallExpression(
-					callExpression.getObjectIdentifier().get(), callExpression.getFunctionDefinition(), newChildren,
+			CallExpression newCall;
+			if (callExpression.getFunctionIdentifier().isPresent()) {
+				newCall = new CallExpression(
+					callExpression.getFunctionIdentifier().get(), callExpression.getFunctionDefinition(), newChildren,
 					callExpression.getOutputDataType());
+			} else {
+				newCall = new CallExpression(
+					callExpression.getFunctionDefinition(), newChildren, callExpression.getOutputDataType());
+			}
 			return convertExprToRexNode(newCall);
 		}
 

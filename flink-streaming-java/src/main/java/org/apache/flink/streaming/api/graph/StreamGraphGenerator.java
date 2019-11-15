@@ -24,6 +24,7 @@ import org.apache.flink.api.common.cache.DistributedCache;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.api.dag.Transformation;
 import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.runtime.jobgraph.SavepointRestoreSettings;
 import org.apache.flink.runtime.jobgraph.ScheduleMode;
 import org.apache.flink.runtime.state.KeyGroupRangeAssignment;
 import org.apache.flink.runtime.state.StateBackend;
@@ -107,11 +108,11 @@ public class StreamGraphGenerator {
 
 	private final CheckpointConfig checkpointConfig;
 
+	private SavepointRestoreSettings savepointRestoreSettings = SavepointRestoreSettings.none();
+
 	private StateBackend stateBackend;
 
 	private boolean chaining = true;
-
-	private boolean isSlotSharingEnabled = true;
 
 	private ScheduleMode scheduleMode = DEFAULT_SCHEDULE_MODE;
 
@@ -158,11 +159,6 @@ public class StreamGraphGenerator {
 		return this;
 	}
 
-	public StreamGraphGenerator setSlotSharingEnabled(boolean isSlotSharingEnabled) {
-		this.isSlotSharingEnabled = isSlotSharingEnabled;
-		return this;
-	}
-
 	public StreamGraphGenerator setScheduleMode(ScheduleMode scheduleMode) {
 		this.scheduleMode = scheduleMode;
 		return this;
@@ -193,8 +189,12 @@ public class StreamGraphGenerator {
 		return this;
 	}
 
+	public void setSavepointRestoreSettings(SavepointRestoreSettings savepointRestoreSettings) {
+		this.savepointRestoreSettings = savepointRestoreSettings;
+	}
+
 	public StreamGraph generate() {
-		streamGraph = new StreamGraph(executionConfig, checkpointConfig);
+		streamGraph = new StreamGraph(executionConfig, checkpointConfig, savepointRestoreSettings);
 		streamGraph.setStateBackend(stateBackend);
 		streamGraph.setChaining(chaining);
 		streamGraph.setScheduleMode(scheduleMode);
@@ -742,10 +742,6 @@ public class StreamGraphGenerator {
 	 * @param inputIds The IDs of the input operations.
 	 */
 	private String determineSlotSharingGroup(String specifiedGroup, Collection<Integer> inputIds) {
-		if (!isSlotSharingEnabled) {
-			return null;
-		}
-
 		if (specifiedGroup != null) {
 			return specifiedGroup;
 		} else {

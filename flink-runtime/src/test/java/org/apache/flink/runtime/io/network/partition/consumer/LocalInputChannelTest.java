@@ -22,6 +22,7 @@ import org.apache.flink.runtime.concurrent.FutureUtils;
 import org.apache.flink.runtime.execution.CancelTaskException;
 import org.apache.flink.runtime.io.network.TaskEventDispatcher;
 import org.apache.flink.runtime.io.network.buffer.BufferBuilder;
+import org.apache.flink.runtime.io.network.buffer.BufferConsumer;
 import org.apache.flink.runtime.io.network.buffer.BufferPool;
 import org.apache.flink.runtime.io.network.buffer.BufferProvider;
 import org.apache.flink.runtime.io.network.buffer.NetworkBufferPool;
@@ -35,6 +36,7 @@ import org.apache.flink.runtime.io.network.partition.ResultSubpartitionView;
 import org.apache.flink.runtime.io.network.util.TestBufferFactory;
 import org.apache.flink.runtime.io.network.util.TestPartitionProducer;
 import org.apache.flink.runtime.io.network.util.TestProducerSource;
+import org.apache.flink.runtime.jobgraph.IntermediateResultPartitionID;
 import org.apache.flink.util.function.CheckedSupplier;
 
 import org.apache.flink.shaded.guava18.com.google.common.collect.Lists;
@@ -465,9 +467,10 @@ public class LocalInputChannelTest {
 			if (channelIndexes.size() > 0) {
 				final int channelIndex = channelIndexes.remove(0);
 				BufferBuilder bufferBuilder = bufferProvider.requestBufferBuilderBlocking();
+				BufferConsumer bufferConsumer = bufferBuilder.createBufferConsumer();
 				bufferBuilder.appendAndCommit(ByteBuffer.wrap(new byte[4]));
 				bufferBuilder.finish();
-				return new BufferConsumerAndChannel(bufferBuilder.createBufferConsumer(), channelIndex);
+				return new BufferConsumerAndChannel(bufferConsumer, channelIndex);
 			}
 
 			return null;

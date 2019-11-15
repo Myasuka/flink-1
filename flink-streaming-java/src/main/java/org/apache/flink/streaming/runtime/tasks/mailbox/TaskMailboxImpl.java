@@ -18,91 +18,127 @@
 
 package org.apache.flink.streaming.runtime.tasks.mailbox;
 
-import org.apache.flink.util.Preconditions;
+import org.apache.flink.annotation.VisibleForTesting;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.GuardedBy;
 import javax.annotation.concurrent.ThreadSafe;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Deque;
 import java.util.Iterator;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 
+import static org.apache.flink.streaming.runtime.tasks.mailbox.TaskMailbox.State.CLOSED;
+import static org.apache.flink.streaming.runtime.tasks.mailbox.TaskMailbox.State.OPEN;
+import static org.apache.flink.streaming.runtime.tasks.mailbox.TaskMailbox.State.QUIESCED;
+
 /**
  * Implementation of {@link TaskMailbox} in a {@link java.util.concurrent.BlockingQueue} fashion and tailored towards
- * our use case with multiple writers, single reader and volatile reads.
+ * our use case with multiple writers and single reader.
  */
 @ThreadSafe
 public class TaskMailboxImpl implements TaskMailbox {
 	/**
 	 * Lock for all concurrent ops.
 	 */
-	private final ReentrantLock lock;
+	private final ReentrantLock lock = new ReentrantLock();
 
 	/**
-	 * Internal queue of letters.
+	 * Internal queue of mails.
 	 */
 	@GuardedBy("lock")
-	private final LinkedList<Mail> queue;
+	private final Deque<Mail> queue = new ArrayDeque<>();
 
 	/**
 	 * Condition that is triggered when the mailbox is no longer empty.
 	 */
 	@GuardedBy("lock")
-	private final Condition notEmpty;
-
-	/**
-	 * Number of letters in the mailbox. We track it separately from the queue#size to avoid locking on {@link #hasMail()}.
-	 */
-	@GuardedBy("lock")
-	private volatile int count;
+	private final Condition notEmpty = lock.newCondition();
 
 	/**
 	 * The state of the mailbox in the lifecycle of open, quiesced, and closed.
 	 */
 	@GuardedBy("lock")
-	private volatile State state;
+	private State state = OPEN;
 
+	/**
+	 * Reference to the thread that executes the mailbox mails.
+	 */
+	@Nonnull
+	private final Thread taskMailboxThread;
+
+	/**
+	 * The current batch of mails. A new batch can be created with {@link #createBatch()} and consumed with {@link
+	 * #tryTakeFromBatch()}.
+	 */
+	private final Deque<Mail> batch = new ArrayDeque<>();
+
+	public TaskMailboxImpl(@Nonnull final Thread taskMailboxThread) {
+		this.taskMailboxThread = taskMailboxThread;
+	}
+
+	@VisibleForTesting
 	public TaskMailboxImpl() {
-		this.lock = new ReentrantLock();
-		this.notEmpty = lock.newCondition();
-		this.state = State.CLOSED;
-		this.queue = new LinkedList<>();
-		this.count = 0;
+		this(Thread.currentThread());
+	}
+
+	@Override
+	public boolean isMailboxThread() {
+		return Thread.currentThread() == taskMailboxThread;
 	}
 
 	@Override
 	public boolean hasMail() {
-		return !isEmpty();
-	}
+		checkIsMailboxThread();
+		if (!batch.isEmpty()) {
+			return true;
+		}
 
-	@Override
-	public Optional<Runnable> tryTakeMail(int priority) throws MailboxStateException {
 		final ReentrantLock lock = this.lock;
 		lock.lock();
 		try {
-			return Optional.ofNullable(takeHeadInternal(priority));
+			return !queue.isEmpty();
 		} finally {
 			lock.unlock();
 		}
 	}
 
 	@Override
-	public @Nonnull Runnable takeMail(int priorty) throws InterruptedException, MailboxStateException {
+	public Optional<Mail> tryTake(int priority) {
+		Optional<Mail> head = tryTakeFromBatch();
+		if (head.isPresent()) {
+			return head;
+		}
+		final ReentrantLock lock = this.lock;
+		lock.lock();
+		try {
+			return Optional.ofNullable(takeOrNull(queue, priority));
+		} finally {
+			lock.unlock();
+		}
+	}
+
+	@Override
+	public @Nonnull Mail take(int priorty) throws InterruptedException, IllegalStateException {
+		Optional<Mail> head = tryTakeFromBatch();
+		if (head.isPresent()) {
+			return head.get();
+		}
 		final ReentrantLock lock = this.lock;
 		lock.lockInterruptibly();
 		try {
-			Runnable headLetter;
-			while ((headLetter = takeHeadInternal(priorty)) == null) {
+			Mail headMail;
+			while ((headMail = takeOrNull(queue, priorty)) == null) {
 				notEmpty.await();
 			}
-			return headLetter;
+			return headMail;
 		} finally {
 			lock.unlock();
 		}
@@ -111,142 +147,141 @@ public class TaskMailboxImpl implements TaskMailbox {
 	//------------------------------------------------------------------------------------------------------------------
 
 	@Override
-	public void putMail(@Nonnull Runnable letter, int priority) throws MailboxStateException {
+	public boolean createBatch() {
+		checkIsMailboxThread();
 		final ReentrantLock lock = this.lock;
 		lock.lock();
 		try {
-			putTailInternal(new Mail(letter, priority));
+			Mail mail;
+			while ((mail = queue.pollFirst()) != null) {
+				batch.addLast(mail);
+			}
+			return !batch.isEmpty();
 		} finally {
 			lock.unlock();
 		}
+	}
+
+	@Override
+	public Optional<Mail> tryTakeFromBatch() {
+		checkIsMailboxThread();
+		return Optional.ofNullable(takeOrNull(batch, MIN_PRIORITY));
 	}
 
 	//------------------------------------------------------------------------------------------------------------------
 
 	@Override
-	public void putFirst(@Nonnull Runnable priorityLetter) throws MailboxStateException {
+	public void put(@Nonnull Mail mail) {
 		final ReentrantLock lock = this.lock;
 		lock.lock();
 		try {
-			putHeadInternal(new Mail(priorityLetter, MAX_PRIORITY));
+			checkPutStateConditions();
+			queue.addLast(mail);
+			notEmpty.signal();
 		} finally {
 			lock.unlock();
 		}
 	}
 
+	@Override
+	public void putFirst(@Nonnull Mail mail) {
+		if (isMailboxThread()) {
+			checkPutStateConditions();
+			batch.addFirst(mail);
+		} else {
+			final ReentrantLock lock = this.lock;
+			lock.lock();
+			try {
+				checkPutStateConditions();
+				queue.addFirst(mail);
+				notEmpty.signal();
+			} finally {
+				lock.unlock();
+			}
+		}
+	}
+
 	//------------------------------------------------------------------------------------------------------------------
-
-	private void putHeadInternal(Mail newHead) throws MailboxStateException {
-		assert lock.isHeldByCurrentThread();
-		checkPutStateConditions();
-		queue.addFirst(newHead);
-		incrementCountAndCheckOverflow();
-		notEmpty.signal();
-	}
-
-	private void putTailInternal(Mail newTail) throws MailboxStateException {
-		assert lock.isHeldByCurrentThread();
-		checkPutStateConditions();
-		queue.addLast(newTail);
-		incrementCountAndCheckOverflow();
-		notEmpty.signal();
-	}
-
-	private void incrementCountAndCheckOverflow() {
-		Preconditions.checkState(++count > 0, "Mailbox overflow.");
-	}
 
 	@Nullable
-	private Runnable takeHeadInternal(int priority) throws MailboxStateException {
-		assert lock.isHeldByCurrentThread();
+	private Mail takeOrNull(Deque<Mail> queue, int priority) {
 		checkTakeStateConditions();
 		Iterator<Mail> iterator = queue.iterator();
 		while (iterator.hasNext()) {
 			Mail mail = iterator.next();
 			if (mail.getPriority() >= priority) {
-				--count;
 				iterator.remove();
-				return mail.getRunnable();
+				return mail;
 			}
 		}
 		return null;
 	}
 
-	private void drainAllLetters(List<Runnable> drainInto) {
-		assert lock.isHeldByCurrentThread();
-		for (Mail mail : queue) {
-			drainInto.add(mail.getRunnable());
-		}
-		queue.clear();
-		count = 0;
-	}
-
-	private boolean isEmpty() {
-		return count == 0;
-	}
-
-	private boolean isPutAbleState() {
-		return state == State.OPEN;
-	}
-
-	private boolean isTakeAbleState() {
-		return state != State.CLOSED;
-	}
-
-	private void checkPutStateConditions() throws MailboxStateException {
-		final State state = this.state;
-		if (!isPutAbleState()) {
-			throw new MailboxStateException("Mailbox is in state " + state + ", but is required to be in state " +
-				State.OPEN + " for put operations.");
-		}
-	}
-
-	private void checkTakeStateConditions() throws MailboxStateException {
-		final State state = this.state;
-		if (!isTakeAbleState()) {
-			throw new MailboxStateException("Mailbox is in state " + state + ", but is required to be in state " +
-				State.OPEN + " or " + State.QUIESCED + " for take operations.");
-		}
-	}
-
 	@Override
-	public void open() {
+	public List<Mail> drain() {
+		List<Mail> drainedMails = new ArrayList<>(batch);
+		batch.clear();
+		final ReentrantLock lock = this.lock;
 		lock.lock();
 		try {
-			if (state == State.CLOSED) {
-				state = State.OPEN;
-			}
+			drainedMails.addAll(queue);
+			queue.clear();
+			return drainedMails;
 		} finally {
 			lock.unlock();
+		}
+	}
+
+	private void checkIsMailboxThread() {
+		if (!isMailboxThread()) {
+			throw new IllegalStateException(
+				"Illegal thread detected. This method must be called from inside the mailbox thread!");
+		}
+	}
+
+	private void checkPutStateConditions() {
+		final State state = this.state;
+		if (this.state != OPEN) {
+			throw new IllegalStateException("Mailbox is in state " + state + ", but is required to be in state " +
+				OPEN + " for put operations.");
+		}
+	}
+
+	private void checkTakeStateConditions() {
+		final State state = this.state;
+		if (this.state == CLOSED) {
+			throw new IllegalStateException("Mailbox is in state " + state + ", but is required to be in state " +
+				OPEN + " or " + QUIESCED + " for take operations.");
 		}
 	}
 
 	@Override
 	public void quiesce() {
+		final ReentrantLock lock = this.lock;
 		lock.lock();
 		try {
-			if (state == State.OPEN) {
-				state = State.QUIESCED;
+			if (state == OPEN) {
+				state = QUIESCED;
 			}
 		} finally {
-			lock.unlock();
+			this.lock.unlock();
 		}
 	}
 
 	@Nonnull
 	@Override
-	public List<Runnable> close() {
+	public List<Mail> close() {
+		final ReentrantLock lock = this.lock;
 		lock.lock();
 		try {
-			if (state == State.CLOSED) {
+			if (state == CLOSED) {
 				return Collections.emptyList();
 			}
-			List<Runnable> droppedLetters = new ArrayList<>(count);
-			drainAllLetters(droppedLetters);
-			state = State.CLOSED;
+			List<Mail> droppedMails = drain();
+			state = CLOSED;
 			// to unblock all
 			notEmpty.signalAll();
-			return droppedLetters;
+			return droppedMails;
 		} finally {
 			lock.unlock();
 		}
@@ -255,62 +290,22 @@ public class TaskMailboxImpl implements TaskMailbox {
 	@Nonnull
 	@Override
 	public State getState() {
-		return state;
+		final ReentrantLock lock = this.lock;
+		lock.lock();
+		try {
+			return state;
+		} finally {
+			lock.unlock();
+		}
 	}
 
 	@Override
-	public Mailbox getDownstreamMailbox(int priority) {
-		Preconditions.checkArgument(priority >= 0, "The priority of a downstream mailbox should be non-negative");
-		return new DownstreamMailbox(priority);
-	}
-
-	class DownstreamMailbox implements Mailbox {
-		private final int priority;
-
-		DownstreamMailbox(int priority) {
-			this.priority = priority;
-		}
-
-		@Override
-		public Optional<Runnable> tryTakeMail() throws MailboxStateException {
-			return TaskMailboxImpl.this.tryTakeMail(priority);
-		}
-
-		@Nonnull
-		@Override
-		public Runnable takeMail() throws InterruptedException, MailboxStateException {
-			return TaskMailboxImpl.this.takeMail(priority);
-		}
-
-		@Override
-		public void putMail(@Nonnull Runnable letter) throws MailboxStateException {
-			TaskMailboxImpl.this.putMail(letter, priority);
-		}
-
-		@Override
-		public void putFirst(@Nonnull Runnable priorityLetter) throws MailboxStateException {
-			TaskMailboxImpl.this.putFirst(priorityLetter);
-		}
-	}
-
-	/**
-	 * An executable bound to a specific operator in the chain, such that it can be picked for downstream mailbox.
-	 */
-	static class Mail {
-		private final Runnable runnable;
-		private final int priority;
-
-		public Mail(Runnable runnable, int priority) {
-			this.runnable = runnable;
-			this.priority = priority;
-		}
-
-		public int getPriority() {
-			return priority;
-		}
-
-		Runnable getRunnable() {
-			return runnable;
+	public void runExclusively(Runnable runnable) {
+		lock.lock();
+		try {
+			runnable.run();
+		} finally {
+			lock.unlock();
 		}
 	}
 }

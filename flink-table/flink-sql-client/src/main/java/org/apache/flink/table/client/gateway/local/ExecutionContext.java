@@ -21,19 +21,20 @@ package org.apache.flink.table.client.gateway.local;
 import org.apache.flink.api.common.ExecutionConfig;
 import org.apache.flink.api.common.Plan;
 import org.apache.flink.api.common.time.Time;
+import org.apache.flink.api.dag.Pipeline;
 import org.apache.flink.api.java.ExecutionEnvironment;
+import org.apache.flink.client.FlinkPipelineTranslationUtil;
 import org.apache.flink.client.cli.CliArgsException;
 import org.apache.flink.client.cli.CustomCommandLine;
-import org.apache.flink.client.cli.RunOptions;
+import org.apache.flink.client.cli.ExecutionConfigAccessor;
+import org.apache.flink.client.cli.ProgramOptions;
+import org.apache.flink.client.deployment.ClusterClientFactory;
+import org.apache.flink.client.deployment.ClusterClientServiceLoader;
 import org.apache.flink.client.deployment.ClusterDescriptor;
 import org.apache.flink.client.deployment.ClusterSpecification;
-import org.apache.flink.client.program.ClusterClient;
+import org.apache.flink.client.deployment.DefaultClusterClientServiceLoader;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.core.plugin.TemporaryClassLoaderContext;
-import org.apache.flink.optimizer.DataStatistics;
-import org.apache.flink.optimizer.Optimizer;
-import org.apache.flink.optimizer.costs.DefaultCostEstimator;
-import org.apache.flink.optimizer.plan.FlinkPlan;
 import org.apache.flink.runtime.execution.librarycache.FlinkUserCodeClassLoaders;
 import org.apache.flink.runtime.jobgraph.JobGraph;
 import org.apache.flink.streaming.api.TimeCharacteristic;
@@ -67,10 +68,12 @@ import org.apache.flink.table.delegation.Executor;
 import org.apache.flink.table.delegation.ExecutorFactory;
 import org.apache.flink.table.delegation.Planner;
 import org.apache.flink.table.delegation.PlannerFactory;
+import org.apache.flink.table.descriptors.CoreModuleDescriptorValidator;
 import org.apache.flink.table.factories.BatchTableSinkFactory;
 import org.apache.flink.table.factories.BatchTableSourceFactory;
 import org.apache.flink.table.factories.CatalogFactory;
 import org.apache.flink.table.factories.ComponentFactoryService;
+import org.apache.flink.table.factories.ModuleFactory;
 import org.apache.flink.table.factories.TableFactoryService;
 import org.apache.flink.table.factories.TableSinkFactory;
 import org.apache.flink.table.factories.TableSourceFactory;
@@ -79,6 +82,8 @@ import org.apache.flink.table.functions.FunctionService;
 import org.apache.flink.table.functions.ScalarFunction;
 import org.apache.flink.table.functions.TableFunction;
 import org.apache.flink.table.functions.UserDefinedFunction;
+import org.apache.flink.table.module.Module;
+import org.apache.flink.table.module.ModuleManager;
 import org.apache.flink.table.planner.delegation.ExecutorBase;
 import org.apache.flink.table.sinks.TableSink;
 import org.apache.flink.table.sources.TableSource;
@@ -94,41 +99,54 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Supplier;
 
+import static org.apache.flink.util.Preconditions.checkNotNull;
+import static org.apache.flink.util.Preconditions.checkState;
+
 /**
  * Context for executing table programs. This class caches everything that can be cached across
  * multiple queries as long as the session context does not change. This must be thread-safe as
  * it might be reused across different query submissions.
  *
- * @param <T> cluster id
+ * @param <ClusterID> cluster id
  */
-public class ExecutionContext<T> {
+public class ExecutionContext<ClusterID> {
 
 	private final SessionContext sessionContext;
 	private final Environment mergedEnv;
-	private final List<URL> dependencies;
 	private final ClassLoader classLoader;
+	private final Map<String, Module> modules;
 	private final Map<String, Catalog> catalogs;
 	private final Map<String, TableSource<?>> tableSources;
 	private final Map<String, TableSink<?>> tableSinks;
 	private final Map<String, UserDefinedFunction> functions;
 	private final Configuration flinkConfig;
-	private final CommandLine commandLine;
-	private final CustomCommandLine<T> activeCommandLine;
-	private final RunOptions runOptions;
-	private final T clusterId;
+	private final Configuration executorConfig;
+	private final ClusterClientFactory<ClusterID> clusterClientFactory;
+	private final ExecutionConfigAccessor executionParameters;
+	private final ClusterID clusterId;
 	private final ClusterSpecification clusterSpec;
 
 	public ExecutionContext(Environment defaultEnvironment, SessionContext sessionContext, List<URL> dependencies,
-			Configuration flinkConfig, Options commandLineOptions, List<CustomCommandLine<?>> availableCommandLines) {
+				Configuration flinkConfig, Options commandLineOptions, List<CustomCommandLine> availableCommandLines) throws FlinkException {
+		this(defaultEnvironment, sessionContext, dependencies, flinkConfig, new DefaultClusterClientServiceLoader(), commandLineOptions, availableCommandLines);
+	}
+
+	public ExecutionContext(Environment defaultEnvironment, SessionContext sessionContext, List<URL> dependencies,
+			Configuration flinkConfig, ClusterClientServiceLoader clusterClientServiceLoader, Options commandLineOptions, List<CustomCommandLine> availableCommandLines) throws FlinkException {
 		this.sessionContext = sessionContext.copy(); // create internal copy because session context is mutable
 		this.mergedEnv = Environment.merge(defaultEnvironment, sessionContext.getEnvironment());
-		this.dependencies = dependencies;
 		this.flinkConfig = flinkConfig;
 
 		// create class loader
 		classLoader = FlinkUserCodeClassLoaders.parentFirst(
 			dependencies.toArray(new URL[dependencies.size()]),
 			this.getClass().getClassLoader());
+
+		// create modules
+		modules = new LinkedHashMap<>();
+		mergedEnv.getModules().forEach((name, entry) ->
+			modules.put(name, createModule(entry.asMap(), classLoader))
+		);
 
 		// create catalogs
 		catalogs = new LinkedHashMap<>();
@@ -156,11 +174,17 @@ public class ExecutionContext<T> {
 		});
 
 		// convert deployment options into command line options that describe a cluster
-		commandLine = createCommandLine(mergedEnv.getDeployment(), commandLineOptions);
-		activeCommandLine = findActiveCommandLine(availableCommandLines, commandLine);
-		runOptions = createRunOptions(commandLine);
-		clusterId = activeCommandLine.getClusterId(commandLine);
-		clusterSpec = createClusterSpecification(activeCommandLine, commandLine);
+		final ClusterClientServiceLoader serviceLoader = checkNotNull(clusterClientServiceLoader);
+		final CommandLine commandLine = createCommandLine(mergedEnv.getDeployment(), commandLineOptions);
+		final CustomCommandLine activeCommandLine = findActiveCommandLine(availableCommandLines, commandLine);
+
+		executorConfig = activeCommandLine.applyCommandLineOptionsToConfiguration(commandLine);
+		clusterClientFactory = serviceLoader.getClusterClientFactory(executorConfig);
+		checkState(clusterClientFactory != null);
+
+		executionParameters = createExecutionParameterProvider(commandLine, dependencies);
+		clusterId = clusterClientFactory.getClusterId(executorConfig);
+		clusterSpec = clusterClientFactory.getClusterSpecification(executorConfig);
 	}
 
 	public SessionContext getSessionContext() {
@@ -179,12 +203,12 @@ public class ExecutionContext<T> {
 		return clusterSpec;
 	}
 
-	public T getClusterId() {
+	public ClusterID getClusterId() {
 		return clusterId;
 	}
 
-	public ClusterDescriptor<T> createClusterDescriptor() throws Exception {
-		return activeCommandLine.createClusterDescriptor(commandLine);
+	public ClusterDescriptor<ClusterID> createClusterDescriptor() {
+		return clusterClientFactory.createClusterDescriptor(executorConfig);
 	}
 
 	public EnvironmentInstance createEnvironmentInstance() {
@@ -227,30 +251,28 @@ public class ExecutionContext<T> {
 		}
 	}
 
-	@SuppressWarnings("unchecked")
-	private static <T> CustomCommandLine<T> findActiveCommandLine(List<CustomCommandLine<?>> availableCommandLines, CommandLine commandLine) {
-		for (CustomCommandLine<?> cli : availableCommandLines) {
+	private static CustomCommandLine findActiveCommandLine(List<CustomCommandLine> availableCommandLines, CommandLine commandLine) {
+		for (CustomCommandLine cli : availableCommandLines) {
 			if (cli.isActive(commandLine)) {
-				return (CustomCommandLine<T>) cli;
+				return cli;
 			}
 		}
 		throw new SqlExecutionException("Could not find a matching deployment.");
 	}
 
-	private static RunOptions createRunOptions(CommandLine commandLine) {
+	private static ExecutionConfigAccessor createExecutionParameterProvider(CommandLine commandLine, List<URL> jobJars) {
 		try {
-			return new RunOptions(commandLine);
+			final ProgramOptions programOptions = new ProgramOptions(commandLine);
+			return ExecutionConfigAccessor.fromProgramOptions(programOptions, jobJars);
 		} catch (CliArgsException e) {
 			throw new SqlExecutionException("Invalid deployment run options.", e);
 		}
 	}
 
-	private static ClusterSpecification createClusterSpecification(CustomCommandLine<?> activeCommandLine, CommandLine commandLine) {
-		try {
-			return activeCommandLine.getClusterSpecification(commandLine);
-		} catch (FlinkException e) {
-			throw new SqlExecutionException("Could not create cluster specification for the given deployment.", e);
-		}
+	private Module createModule(Map<String, String> moduleProperties, ClassLoader classLoader) {
+		final ModuleFactory factory =
+			TableFactoryService.find(ModuleFactory.class, moduleProperties, classLoader);
+		return factory.createModule(moduleProperties);
 	}
 
 	private Catalog createCatalog(String name, Map<String, String> catalogProperties, ClassLoader classLoader) {
@@ -295,8 +317,8 @@ public class ExecutionContext<T> {
 		final CatalogManager catalogManager = new CatalogManager(
 			settings.getBuiltInCatalogName(),
 			new GenericInMemoryCatalog(settings.getBuiltInCatalogName(), settings.getBuiltInDatabaseName()));
-
-		final FunctionCatalog functionCatalog = new FunctionCatalog(catalogManager);
+		final ModuleManager moduleManager = new ModuleManager();
+		final FunctionCatalog functionCatalog = new FunctionCatalog(catalogManager, moduleManager);
 
 		final Map<String, String> plannerProperties = settings.toPlannerProperties();
 		final Planner planner = ComponentFactoryService.find(PlannerFactory.class, plannerProperties)
@@ -304,6 +326,7 @@ public class ExecutionContext<T> {
 
 		return new StreamTableEnvironmentImpl(
 			catalogManager,
+			moduleManager,
 			functionCatalog,
 			config,
 			env,
@@ -371,6 +394,13 @@ public class ExecutionContext<T> {
 			// set table configuration
 			mergedEnv.getConfiguration().asMap().forEach((k, v) ->
 				tableEnv.getConfig().getConfiguration().setString(k, v));
+
+			// load modules
+			if (!modules.isEmpty()) {
+				// unload core module first to respect whatever users configure
+				tableEnv.unloadModule(CoreModuleDescriptorValidator.MODULE_TYPE_CORE);
+				modules.forEach(tableEnv::loadModule);
+			}
 
 			// register catalogs
 			catalogs.forEach(tableEnv::registerCatalog);
@@ -440,16 +470,29 @@ public class ExecutionContext<T> {
 		}
 
 		public JobGraph createJobGraph(String name) {
-			final FlinkPlan plan = createPlan(name, flinkConfig);
-			return ClusterClient.getJobGraph(
-				flinkConfig,
-				plan,
-				dependencies,
-				runOptions.getClasspaths(),
-				runOptions.getSavepointRestoreSettings());
+			final Pipeline pipeline = createPipeline(name, flinkConfig);
+
+			int parallelism;
+			if (execEnv != null) {
+				parallelism = execEnv.getParallelism();
+			} else if (streamExecEnv != null) {
+				parallelism = streamExecEnv.getParallelism();
+			} else {
+				throw new RuntimeException("No execution environment defined.");
+			}
+			JobGraph jobGraph = FlinkPipelineTranslationUtil.getJobGraph(
+					pipeline,
+					flinkConfig,
+					parallelism);
+
+			jobGraph.addJars(executionParameters.getJars());
+			jobGraph.setClasspaths(executionParameters.getClasspaths());
+			jobGraph.setSavepointRestoreSettings(executionParameters.getSavepointRestoreSettings());
+
+			return jobGraph;
 		}
 
-		private FlinkPlan createPlan(String name, Configuration flinkConfig) {
+		private Pipeline createPipeline(String name, Configuration flinkConfig) {
 			if (streamExecEnv != null) {
 				// special case for Blink planner to apply batch optimizations
 				// note: it also modifies the ExecutionConfig!
@@ -461,8 +504,7 @@ public class ExecutionContext<T> {
 				final int parallelism = execEnv.getParallelism();
 				final Plan unoptimizedPlan = execEnv.createProgramPlan();
 				unoptimizedPlan.setJobName(name);
-				final Optimizer compiler = new Optimizer(new DataStatistics(), new DefaultCostEstimator(), flinkConfig);
-				return ClusterClient.getOptimizedPlan(compiler, unoptimizedPlan, parallelism);
+				return unoptimizedPlan;
 			}
 		}
 

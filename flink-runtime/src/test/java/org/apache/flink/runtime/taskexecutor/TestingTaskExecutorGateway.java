@@ -34,12 +34,14 @@ import org.apache.flink.runtime.io.network.partition.ResultPartitionID;
 import org.apache.flink.runtime.jobmaster.AllocatedSlotReport;
 import org.apache.flink.runtime.jobmaster.JobMasterId;
 import org.apache.flink.runtime.messages.Acknowledge;
-import org.apache.flink.runtime.messages.StackTraceSampleResponse;
+import org.apache.flink.runtime.messages.TaskBackPressureResponse;
 import org.apache.flink.runtime.resourcemanager.ResourceManagerId;
+import org.apache.flink.runtime.rpc.RpcTimeout;
 import org.apache.flink.types.SerializableOptional;
 import org.apache.flink.util.Preconditions;
+import org.apache.flink.util.function.TriConsumer;
 
-import java.util.Collection;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
@@ -74,7 +76,7 @@ public class TestingTaskExecutorGateway implements TaskExecutorGateway {
 
 	private final Supplier<CompletableFuture<Boolean>> canBeReleasedSupplier;
 
-	private final BiConsumer<JobID, Collection<ResultPartitionID>> releasePartitionsConsumer;
+	private final TriConsumer<JobID, Set<ResultPartitionID>, Set<ResultPartitionID>> releaseOrPromotePartitionsConsumer;
 
 	TestingTaskExecutorGateway(
 			String address,
@@ -88,7 +90,7 @@ public class TestingTaskExecutorGateway implements TaskExecutorGateway {
 			Consumer<Exception> disconnectResourceManagerConsumer,
 			Function<ExecutionAttemptID, CompletableFuture<Acknowledge>> cancelTaskFunction,
 			Supplier<CompletableFuture<Boolean>> canBeReleasedSupplier,
-			BiConsumer<JobID, Collection<ResultPartitionID>> releasePartitionsConsumer) {
+			TriConsumer<JobID, Set<ResultPartitionID>, Set<ResultPartitionID>> releaseOrPromotePartitionsConsumer) {
 		this.address = Preconditions.checkNotNull(address);
 		this.hostname = Preconditions.checkNotNull(hostname);
 		this.heartbeatJobManagerConsumer = Preconditions.checkNotNull(heartbeatJobManagerConsumer);
@@ -100,7 +102,7 @@ public class TestingTaskExecutorGateway implements TaskExecutorGateway {
 		this.disconnectResourceManagerConsumer = disconnectResourceManagerConsumer;
 		this.cancelTaskFunction = cancelTaskFunction;
 		this.canBeReleasedSupplier = canBeReleasedSupplier;
-		this.releasePartitionsConsumer = releasePartitionsConsumer;
+		this.releaseOrPromotePartitionsConsumer = releaseOrPromotePartitionsConsumer;
 	}
 
 	@Override
@@ -109,13 +111,7 @@ public class TestingTaskExecutorGateway implements TaskExecutorGateway {
 	}
 
 	@Override
-	public CompletableFuture<StackTraceSampleResponse> requestStackTraceSample(
-		final ExecutionAttemptID executionAttemptId,
-		final int sampleId,
-		final int numSamples,
-		final Time delayBetweenSamples,
-		final int maxStackTraceDepth,
-		final Time timeout) {
+	public CompletableFuture<TaskBackPressureResponse> requestTaskBackPressure(ExecutionAttemptID executionAttemptId, int requestId, @RpcTimeout Time timeout) {
 		throw new UnsupportedOperationException();
 	}
 
@@ -130,8 +126,8 @@ public class TestingTaskExecutorGateway implements TaskExecutorGateway {
 	}
 
 	@Override
-	public void releasePartitions(JobID jobId, Collection<ResultPartitionID> partitionIds) {
-		releasePartitionsConsumer.accept(jobId, partitionIds);
+	public void releaseOrPromotePartitions(JobID jobId, Set<ResultPartitionID> partitionToRelease, Set<ResultPartitionID> partitionsToPromote) {
+		releaseOrPromotePartitionsConsumer.accept(jobId, partitionToRelease, partitionsToPromote);
 	}
 
 	@Override

@@ -18,13 +18,22 @@
 
 package org.apache.flink.table.planner.runtime.utils;
 
+import org.apache.flink.api.common.typeinfo.BasicTypeInfo;
+import org.apache.flink.api.common.typeinfo.TypeInformation;
+import org.apache.flink.api.common.typeinfo.Types;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.table.functions.AggregateFunction;
 import org.apache.flink.table.functions.FunctionContext;
 import org.apache.flink.table.functions.ScalarFunction;
+import org.apache.flink.table.functions.python.PythonEnv;
+import org.apache.flink.table.functions.python.PythonFunction;
 
+import java.sql.Timestamp;
 import java.util.Arrays;
 import java.util.Random;
+import java.util.TimeZone;
+
+import static org.junit.Assert.fail;
 
 /**
  * Test scalar functions.
@@ -114,6 +123,45 @@ public class JavaUserDefinedScalarFunctions {
 	}
 
 	/**
+	 * A UDF minus Timestamp with the specified offset.
+	 * This UDF also ensures open and close are called.
+	 */
+	public static class JavaFunc5 extends ScalarFunction {
+		// these fields must be reset to false at the beginning of tests,
+		// otherwise the static fields will be changed by several tests concurrently
+		public static boolean openCalled = false;
+		public static boolean closeCalled = false;
+
+		@Override
+		public void open(FunctionContext context) {
+			openCalled = true;
+		}
+
+		public Timestamp eval(Long l, Integer offset) {
+			if (!openCalled) {
+				fail("Open was not called before run.");
+			}
+			if (l == null || offset == null) {
+				return null;
+			} else {
+				long ts = l - offset;
+				int tzOffset = TimeZone.getDefault().getOffset(ts);
+				return new Timestamp(ts - tzOffset);
+			}
+		}
+
+		@Override
+		public TypeInformation<?> getResultType(Class<?>[] signature) {
+			return Types.SQL_TIMESTAMP;
+		}
+
+		@Override
+		public void close() {
+			closeCalled = true;
+		}
+	}
+
+	/**
 	 * Testing open method is called.
 	 */
 	public static class UdfWithOpen extends ScalarFunction {
@@ -154,4 +202,73 @@ public class JavaUserDefinedScalarFunctions {
 		}
 	}
 
+	/**
+	 * Test for Python Scalar Function.
+	 */
+	public static class PythonScalarFunction extends ScalarFunction implements PythonFunction  {
+		private final String name;
+
+		public PythonScalarFunction(String name) {
+			this.name = name;
+		}
+
+		public int eval(int i, int j) {
+			return i + j;
+		}
+
+		@Override
+		public TypeInformation<?> getResultType(Class<?>[] signature) {
+			return BasicTypeInfo.INT_TYPE_INFO;
+		}
+
+		@Override
+		public String toString() {
+			return name;
+		}
+
+		@Override
+		public byte[] getSerializedPythonFunction() {
+			return new byte[0];
+		}
+
+		@Override
+		public PythonEnv getPythonEnv() {
+			return null;
+		}
+	}
+
+	/**
+	 * Test for Python Scalar Function.
+	 */
+	public static class BooleanPythonScalarFunction extends ScalarFunction implements PythonFunction {
+		private final String name;
+
+		public BooleanPythonScalarFunction(String name) {
+			this.name = name;
+		}
+
+		public boolean eval(int i, int j) {
+			return i + j > 1;
+		}
+
+		@Override
+		public TypeInformation<?> getResultType(Class<?>[] signature) {
+			return BasicTypeInfo.BOOLEAN_TYPE_INFO;
+		}
+
+		@Override
+		public String toString() {
+			return name;
+		}
+
+		@Override
+		public byte[] getSerializedPythonFunction() {
+			return new byte[0];
+		}
+
+		@Override
+		public PythonEnv getPythonEnv() {
+			return null;
+		}
+	}
 }

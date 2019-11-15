@@ -35,6 +35,7 @@ import org.apache.flink.runtime.executiongraph.ExecutionAttemptID;
 import org.apache.flink.runtime.heartbeat.HeartbeatServices;
 import org.apache.flink.runtime.highavailability.TestingHighAvailabilityServices;
 import org.apache.flink.runtime.io.network.NettyShuffleEnvironmentBuilder;
+import org.apache.flink.runtime.io.network.partition.TaskExecutorPartitionTrackerImpl;
 import org.apache.flink.runtime.shuffle.ShuffleEnvironment;
 import org.apache.flink.runtime.io.network.netty.NettyConfig;
 import org.apache.flink.runtime.jobmaster.JobMasterGateway;
@@ -47,7 +48,6 @@ import org.apache.flink.runtime.rpc.RpcService;
 import org.apache.flink.runtime.rpc.RpcUtils;
 import org.apache.flink.runtime.rpc.TestingRpcService;
 import org.apache.flink.runtime.state.TaskExecutorLocalStateStoresManager;
-import org.apache.flink.runtime.taskexecutor.partition.PartitionTable;
 import org.apache.flink.runtime.taskexecutor.rpc.RpcResultPartitionConsumableNotifier;
 import org.apache.flink.runtime.taskexecutor.slot.TaskSlotTable;
 import org.apache.flink.runtime.taskexecutor.slot.TimerService;
@@ -104,6 +104,7 @@ class TaskSubmissionTestEnvironment implements AutoCloseable {
 			TestingJobMasterGateway testingJobMasterGateway,
 			Configuration configuration,
 			List<Tuple3<ExecutionAttemptID, ExecutionState, CompletableFuture<Void>>> taskManagerActionListeners,
+			String metricQueryServiceAddress,
 			TestingRpcService testingRpcService,
 			ShuffleEnvironment<?, ?> shuffleEnvironment) throws Exception {
 
@@ -161,7 +162,7 @@ class TaskSubmissionTestEnvironment implements AutoCloseable {
 			.setTaskStateManager(localStateStoresManager)
 			.build();
 
-		taskExecutor = createTaskExecutor(taskManagerServices, configuration);
+		taskExecutor = createTaskExecutor(taskManagerServices, metricQueryServiceAddress, configuration);
 
 		taskExecutor.start();
 		taskExecutor.waitUntilStarted();
@@ -190,13 +191,13 @@ class TaskSubmissionTestEnvironment implements AutoCloseable {
 	private TaskSlotTable generateTaskSlotTable(int numSlot) {
 		Collection<ResourceProfile> resourceProfiles = new ArrayList<>();
 		for (int i = 0; i < numSlot; i++) {
-			resourceProfiles.add(ResourceProfile.UNKNOWN);
+			resourceProfiles.add(ResourceProfile.ANY);
 		}
 		return new TaskSlotTable(resourceProfiles, timerService);
 	}
 
 	@Nonnull
-	private TestingTaskExecutor createTaskExecutor(TaskManagerServices taskManagerServices, Configuration configuration) {
+	private TestingTaskExecutor createTaskExecutor(TaskManagerServices taskManagerServices, String metricQueryServiceAddress, Configuration configuration) {
 		return new TestingTaskExecutor(
 			testingRpcService,
 			TaskManagerConfiguration.fromConfiguration(configuration),
@@ -204,11 +205,11 @@ class TaskSubmissionTestEnvironment implements AutoCloseable {
 			taskManagerServices,
 			heartbeatServices,
 			UnregisteredMetricGroups.createUnregisteredTaskManagerMetricGroup(),
-			null,
+			metricQueryServiceAddress,
 			blobCacheService,
 			testingFatalErrorHandler,
-			new PartitionTable<>()
-		);
+			new TaskExecutorPartitionTrackerImpl(taskManagerServices.getShuffleEnvironment()),
+			TaskManagerRunner.createBackPressureSampleService(configuration, testingRpcService.getScheduledExecutor()));
 	}
 
 	static JobManagerConnection createJobManagerConnection(JobID jobId, JobMasterGateway jobMasterGateway, RpcService testingRpcService, TaskManagerActions taskManagerActions, Time timeout) {
@@ -285,11 +286,17 @@ class TaskSubmissionTestEnvironment implements AutoCloseable {
 		@SuppressWarnings("OptionalUsedAsFieldOrParameterType")
 		private Optional<ShuffleEnvironment<?, ?>> optionalShuffleEnvironment = Optional.empty();
 		private ResourceID resourceID = ResourceID.generate();
+		private String metricQueryServiceAddress;
 
 		private List<Tuple3<ExecutionAttemptID, ExecutionState, CompletableFuture<Void>>> taskManagerActionListeners = new ArrayList<>();
 
 		public Builder(JobID jobId) {
 			this.jobId = jobId;
+		}
+
+		public Builder setMetricQueryServiceAddress(String metricQueryServiceAddress) {
+			this.metricQueryServiceAddress = metricQueryServiceAddress;
+			return this;
 		}
 
 		public Builder useRealNonMockShuffleEnvironment() {
@@ -359,6 +366,7 @@ class TaskSubmissionTestEnvironment implements AutoCloseable {
 				jobMasterGateway,
 				configuration,
 				taskManagerActionListeners,
+				metricQueryServiceAddress,
 				testingRpcService,
 				network);
 		}

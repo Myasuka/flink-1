@@ -27,7 +27,6 @@ import org.apache.flink.runtime.clusterframework.types.AllocationID;
 import org.apache.flink.runtime.clusterframework.types.ResourceID;
 import org.apache.flink.runtime.clusterframework.types.ResourceProfile;
 import org.apache.flink.runtime.clusterframework.types.SlotID;
-import org.apache.flink.runtime.clusterframework.types.TaskManagerSlot;
 import org.apache.flink.runtime.concurrent.Executors;
 import org.apache.flink.runtime.concurrent.FutureUtils;
 import org.apache.flink.runtime.concurrent.ScheduledExecutor;
@@ -1013,7 +1012,7 @@ public class SlotManagerImplTest extends TestLogger {
 			final SlotID slotId = new SlotID(taskManagerId, 0);
 			final SlotStatus initialSlotStatus = new SlotStatus(
 				slotId,
-				ResourceProfile.UNKNOWN);
+				ResourceProfile.ANY);
 			final SlotReport initialSlotReport = new SlotReport(initialSlotStatus);
 
 			slotManager.registerTaskManager(taskExecutorConnection, initialSlotReport);
@@ -1023,7 +1022,7 @@ public class SlotManagerImplTest extends TestLogger {
 			// Now report this slot as allocated
 			final SlotStatus slotStatus = new SlotStatus(
 				slotId,
-				ResourceProfile.UNKNOWN,
+				ResourceProfile.ANY,
 				new JobID(),
 				new AllocationID());
 			final SlotReport slotReport = new SlotReport(
@@ -1076,7 +1075,7 @@ public class SlotManagerImplTest extends TestLogger {
 
 			final ResourceID taskExecutorResourceId = ResourceID.generate();
 			final TaskExecutorConnection taskExecutionConnection = new TaskExecutorConnection(taskExecutorResourceId, testingTaskExecutorGateway);
-			final SlotReport slotReport = new SlotReport(createEmptySlotStatus(new SlotID(taskExecutorResourceId, 0), ResourceProfile.UNKNOWN));
+			final SlotReport slotReport = new SlotReport(createEmptySlotStatus(new SlotID(taskExecutorResourceId, 0), ResourceProfile.ANY));
 
 			final CompletableFuture<Acknowledge> firstManualSlotRequestResponse = new CompletableFuture<>();
 			responseQueue.offer(firstManualSlotRequestResponse);
@@ -1132,7 +1131,7 @@ public class SlotManagerImplTest extends TestLogger {
 
 			final ResourceID taskExecutorResourceId = ResourceID.generate();
 			final TaskExecutorConnection taskExecutionConnection = new TaskExecutorConnection(taskExecutorResourceId, testingTaskExecutorGateway);
-			final SlotReport slotReport = new SlotReport(createEmptySlotStatus(new SlotID(taskExecutorResourceId, 0), ResourceProfile.UNKNOWN));
+			final SlotReport slotReport = new SlotReport(createEmptySlotStatus(new SlotID(taskExecutorResourceId, 0), ResourceProfile.ANY));
 
 			final CompletableFuture<Acknowledge> firstManualSlotRequestResponse = new CompletableFuture<>();
 			responseQueue.offer(firstManualSlotRequestResponse);
@@ -1262,7 +1261,7 @@ public class SlotManagerImplTest extends TestLogger {
 
 	@Nonnull
 	private SlotReport createSlotReport(ResourceID taskExecutorResourceId, int numberSlots) {
-		return createSlotReport(taskExecutorResourceId, numberSlots, ResourceProfile.UNKNOWN, SlotManagerImplTest::createEmptySlotStatus);
+		return createSlotReport(taskExecutorResourceId, numberSlots, ResourceProfile.ANY, SlotManagerImplTest::createEmptySlotStatus);
 	}
 
 	@Nonnull
@@ -1369,17 +1368,19 @@ public class SlotManagerImplTest extends TestLogger {
 		final TestingResourceActions resourceActions = new TestingResourceActionsBuilder()
 			.setAllocateResourceFunction(convert(value -> numberSlots))
 			.build();
+		final ResourceProfile resourceProfile = new ResourceProfile(1.0, 100);
 
 		try (final SlotManagerImpl slotManager = createSlotManager(ResourceManagerId.generate(), resourceActions)) {
 			final JobID jobId = new JobID();
-			assertThat(slotManager.registerSlotRequest(createSlotRequest(jobId)), is(true));
+			assertThat(slotManager.registerSlotRequest(createSlotRequest(jobId, resourceProfile)), is(true));
 
 			assertThat(slotManager.getNumberPendingTaskManagerSlots(), is(numberSlots));
 			assertThat(slotManager.getNumberAssignedPendingTaskManagerSlots(), is(1));
 			assertThat(slotManager.getNumberRegisteredSlots(), is(0));
 
 			final TaskExecutorConnection taskExecutorConnection = createTaskExecutorConnection();
-			final SlotReport slotReport = createSlotReport(taskExecutorConnection.getResourceID(), numberSlots - 1);
+			final SlotReport slotReport =
+				createSlotReport(taskExecutorConnection.getResourceID(), numberSlots - 1, resourceProfile, SlotManagerImplTest::createEmptySlotStatus);
 
 			slotManager.registerTaskManager(taskExecutorConnection, slotReport);
 
@@ -1390,6 +1391,10 @@ public class SlotManagerImplTest extends TestLogger {
 
 	private TaskExecutorConnection createTaskExecutorConnection() {
 		final TestingTaskExecutorGateway taskExecutorGateway = new TestingTaskExecutorGatewayBuilder().createTestingTaskExecutorGateway();
+		return createTaskExecutorConnection(taskExecutorGateway);
+	}
+
+	private TaskExecutorConnection createTaskExecutorConnection(TaskExecutorGateway taskExecutorGateway) {
 		return new TaskExecutorConnection(ResourceID.generate(), taskExecutorGateway);
 	}
 
@@ -1446,7 +1451,7 @@ public class SlotManagerImplTest extends TestLogger {
 
 			final TaskExecutorConnection taskExecutorConnection = createTaskExecutorConnection();
 			final SlotID slotId = new SlotID(taskExecutorConnection.getResourceID(), 0);
-			final SlotStatus slotStatus = new SlotStatus(slotId, ResourceProfile.UNKNOWN, jobId, new AllocationID());
+			final SlotStatus slotStatus = new SlotStatus(slotId, ResourceProfile.ANY, jobId, new AllocationID());
 			final SlotReport slotReport = new SlotReport(slotStatus);
 
 			slotManager.registerTaskManager(taskExecutorConnection, slotReport);
@@ -1496,7 +1501,58 @@ public class SlotManagerImplTest extends TestLogger {
 		return createSlotReport(
 			resourceID,
 			1,
-			ResourceProfile.UNKNOWN,
+			ResourceProfile.ANY,
 			(slotId, resourceProfile) -> new SlotStatus(slotId, resourceProfile, jobId, new AllocationID()));
+	}
+
+	/**
+	 * The spread out slot allocation strategy should spread out the allocated
+	 * slots across all available TaskExecutors. See FLINK-12122.
+	 */
+	@Test
+	public void testSpreadOutSlotAllocationStrategy() throws Exception {
+		try (SlotManagerImpl slotManager = SlotManagerBuilder.newBuilder()
+			.setSlotMatchingStrategy(LeastUtilizationSlotMatchingStrategy.INSTANCE)
+			.build()) {
+			slotManager.start(
+				ResourceManagerId.generate(),
+				Executors.directExecutor(),
+				new TestingResourceActionsBuilder().build());
+
+			final List<CompletableFuture<JobID>> requestSlotFutures = new ArrayList<>();
+
+			final int numberTaskExecutors = 5;
+
+			// register n TaskExecutors with 2 slots each
+			for (int i = 0; i < numberTaskExecutors; i++) {
+				final CompletableFuture<JobID> requestSlotFuture = new CompletableFuture<>();
+				requestSlotFutures.add(requestSlotFuture);
+				registerTaskExecutorWithTwoSlots(slotManager, requestSlotFuture);
+			}
+
+			final JobID jobId = new JobID();
+
+			// request n slots
+			for (int i = 0; i < numberTaskExecutors; i++) {
+				assertTrue(slotManager.registerSlotRequest(createSlotRequest(jobId)));
+			}
+
+			// check that every TaskExecutor has received a slot request
+			final Set<JobID> jobIds = new HashSet<>(FutureUtils.combineAll(requestSlotFutures).get(10L, TimeUnit.SECONDS));
+			assertThat(jobIds, hasSize(1));
+			assertThat(jobIds, containsInAnyOrder(jobId));
+		}
+	}
+
+	private void registerTaskExecutorWithTwoSlots(SlotManagerImpl slotManager, CompletableFuture<JobID> firstRequestSlotFuture) {
+		final TestingTaskExecutorGateway taskExecutorGateway = new TestingTaskExecutorGatewayBuilder()
+			.setRequestSlotFunction(slotIDJobIDAllocationIDStringResourceManagerIdTuple5 -> {
+				firstRequestSlotFuture.complete(slotIDJobIDAllocationIDStringResourceManagerIdTuple5.f1);
+				return CompletableFuture.completedFuture(Acknowledge.get());
+			})
+			.createTestingTaskExecutorGateway();
+		final TaskExecutorConnection firstTaskExecutorConnection = createTaskExecutorConnection(taskExecutorGateway);
+		final SlotReport firstSlotReport = createSlotReport(firstTaskExecutorConnection.getResourceID(), 2);
+		slotManager.registerTaskManager(firstTaskExecutorConnection, firstSlotReport);
 	}
 }

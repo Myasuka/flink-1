@@ -53,9 +53,7 @@ public final class ConfigConstants {
 	/**
 	 * Defines the restart strategy to be used. It can be "off", "none", "disable" to be disabled or
 	 * it can be "fixeddelay", "fixed-delay" to use the FixedDelayRestartStrategy or it can
-	 * be "failurerate", "failure-rate" to use FailureRateRestartStrategy. You can also
-	 * specify a class name which implements the RestartStrategy interface and has a static
-	 * create method which takes a Configuration object.
+	 * be "failurerate", "failure-rate" to use FailureRateRestartStrategy.
 	 *
 	 * @deprecated use {@link RestartStrategyOptions#RESTART_STRATEGY} instead.
 	 */
@@ -254,7 +252,7 @@ public final class ConfigConstants {
 	 * memory manager (in megabytes). If not set, a relative fraction will be allocated, as defined
 	 * by {@link #TASK_MANAGER_MEMORY_FRACTION_KEY}.
 	 *
-	 * @deprecated Use {@link TaskManagerOptions#MANAGED_MEMORY_SIZE} instead
+	 * @deprecated Use {@link TaskManagerOptions#LEGACY_MANAGED_MEMORY_SIZE} instead
 	 */
 	@Deprecated
 	public static final String TASK_MANAGER_MEMORY_SIZE_KEY = "taskmanager.memory.size";
@@ -262,7 +260,7 @@ public final class ConfigConstants {
 	/**
 	 * The config parameter defining the fraction of free memory allocated by the memory manager.
 	 *
-	 * @deprecated Use {@link TaskManagerOptions#MANAGED_MEMORY_FRACTION} instead
+	 * @deprecated Use {@link TaskManagerOptions#LEGACY_MANAGED_MEMORY_FRACTION} instead
 	 */
 	@Deprecated
 	public static final String TASK_MANAGER_MEMORY_FRACTION_KEY = "taskmanager.memory.fraction";
@@ -274,15 +272,6 @@ public final class ConfigConstants {
 	 */
 	@Deprecated
 	public static final String TASK_MANAGER_MEMORY_OFF_HEAP_KEY = "taskmanager.memory.off-heap";
-
-	/**
-	 * The config parameter for specifying whether TaskManager managed memory should be preallocated
-	 * when the TaskManager is starting. (default is false)
-	 *
-	 * @deprecated Use {@link TaskManagerOptions#MANAGED_MEMORY_PRE_ALLOCATE} instead
-	 */
-	@Deprecated
-	public static final String TASK_MANAGER_MEMORY_PRE_ALLOCATE_KEY = "taskmanager.memory.preallocate";
 
 	/**
 	 * The config parameter defining the number of buffers used in the network stack. This defines the
@@ -824,7 +813,7 @@ public final class ConfigConstants {
 	public static final String JOB_MANAGER_WEB_BACK_PRESSURE_REFRESH_INTERVAL = "jobmanager.web.backpressure.refresh-interval";
 
 	/**
-	 * Number of stack trace samples to take to determine back pressure.
+	 * Number of samples to take to determine back pressure.
 	 *
 	 * @deprecated Use {@link WebOptions#BACKPRESSURE_NUM_SAMPLES} instead.
 	 */
@@ -832,7 +821,7 @@ public final class ConfigConstants {
 	public static final String JOB_MANAGER_WEB_BACK_PRESSURE_NUM_SAMPLES = "jobmanager.web.backpressure.num-samples";
 
 	/**
-	 * Delay between stack trace samples to determine back pressure.
+	 * Delay between samples to determine back pressure.
 	 *
 	 * @deprecated Use {@link WebOptions#BACKPRESSURE_DELAY} instead.
 	 */
@@ -1429,7 +1418,7 @@ public final class ConfigConstants {
 	/**
 	 * Config key has been deprecated. Therefore, no default value required.
 	 *
-	 * @deprecated {@link TaskManagerOptions#MANAGED_MEMORY_FRACTION} provides the default value now
+	 * @deprecated {@link TaskManagerOptions#LEGACY_MANAGED_MEMORY_FRACTION} provides the default value now
 	 */
 	@Deprecated
 	public static final float DEFAULT_MEMORY_MANAGER_MEMORY_FRACTION = 0.7f;
@@ -1503,14 +1492,6 @@ public final class ConfigConstants {
 	 */
 	@Deprecated
 	public static final String DEFAULT_TASK_MANAGER_REFUSED_REGISTRATION_PAUSE = "10 s";
-
-	/**
-	 * Config key has been deprecated. Therefore, no default value required.
-	 *
-	 * @deprecated {@link TaskManagerOptions#MANAGED_MEMORY_PRE_ALLOCATE} provides the default value now
-	 */
-	@Deprecated
-	public static final boolean DEFAULT_TASK_MANAGER_MEMORY_PRE_ALLOCATE = false;
 
 	/** @deprecated Please use {@link TaskManagerOptions#TASK_CANCELLATION_INTERVAL}. */
 	@Deprecated
@@ -2031,11 +2012,17 @@ public final class ConfigConstants {
 	/** The environment variable name which contains the location of the plugins folder. */
 	public static final String ENV_FLINK_PLUGINS_DIR = "FLINK_PLUGINS_DIR";
 
+	/** The default Flink plugins directory if none has been specified via {@link #ENV_FLINK_PLUGINS_DIR}. */
+	public static final String DEFAULT_FLINK_PLUGINS_DIRS = "plugins";
+
 	/** The environment variable name which contains the location of the bin directory. */
 	public static final String ENV_FLINK_BIN_DIR = "FLINK_BIN_DIR";
 
 	/** The environment variable name which contains the Flink installation root directory. */
 	public static final String ENV_FLINK_HOME_DIR = "FLINK_HOME";
+
+	/** The user lib directory name. */
+	public static final String DEFAULT_FLINK_USR_LIB_DIR = "usrlib";
 
 	// ---------------------------- Encoding ------------------------------
 

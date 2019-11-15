@@ -131,6 +131,9 @@ public abstract class YarnTestBase extends TestLogger {
 		"Remote connection to [null] failed with java.nio.channels.NotYetConnectedException",
 		"java.io.IOException: Connection reset by peer",
 
+		// filter out expected ResourceManagerException caused by intended shutdown request
+		YarnResourceManager.ERROR_MASSAGE_ON_SHUTDOWN_REQUEST,
+
 		// this can happen in Akka 2.4 on shutdown.
 		"java.util.concurrent.RejectedExecutionException: Worker has already been shutdown",
 
@@ -301,12 +304,12 @@ public abstract class YarnTestBase extends TestLogger {
 
 	@Nonnull
 	YarnClusterDescriptor createYarnClusterDescriptor(org.apache.flink.configuration.Configuration flinkConfiguration) {
-		final YarnClusterDescriptor yarnClusterDescriptor = new YarnClusterDescriptor(
-			flinkConfiguration,
-			YARN_CONFIGURATION,
-			CliFrontend.getConfigurationDirectoryFromEnv(),
-			yarnClient,
-			true);
+		final YarnClusterDescriptor yarnClusterDescriptor = YarnTestUtils.createClusterDescriptorWithLogging(
+				tempConfPathForSecureRun.getAbsolutePath(),
+				flinkConfiguration,
+				YARN_CONFIGURATION,
+				yarnClient,
+				true);
 		yarnClusterDescriptor.setLocalJarPath(new Path(flinkUberjar.toURI()));
 		yarnClusterDescriptor.addShipFiles(Collections.singletonList(flinkLibFolder));
 		return yarnClusterDescriptor;

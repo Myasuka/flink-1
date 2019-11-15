@@ -19,7 +19,7 @@
 package org.apache.flink.table.planner.calcite
 
 import org.apache.flink.table.api.TableConfig
-import org.apache.flink.table.catalog.FunctionCatalog
+import org.apache.flink.table.catalog.{CatalogManager, FunctionCatalog}
 import org.apache.flink.table.operations.QueryOperation
 import org.apache.flink.table.planner.calcite.FlinkRelBuilder.PlannerNamedWindowProperty
 import org.apache.flink.table.planner.calcite.FlinkRelFactories.{ExpandFactory, RankFactory, SinkFactory}
@@ -77,9 +77,9 @@ class FlinkRelBuilder(
     Util.first(context.unwrap(classOf[SinkFactory]), FlinkRelFactories.DEFAULT_SINK_FACTORY)
   }
 
-  def getRelOptSchema: RelOptSchema = relOptSchema
+  override def getRelOptSchema: RelOptSchema = relOptSchema
 
-  def getCluster: RelOptCluster = relOptCluster
+  override def getCluster: RelOptCluster = relOptCluster
 
   override def getTypeFactory: FlinkTypeFactory =
     super.getTypeFactory.asInstanceOf[FlinkTypeFactory]
@@ -177,6 +177,8 @@ object FlinkRelBuilder {
         override def getFunctionCatalog: FunctionCatalog = clusterContext.getFunctionCatalog
 
         override def unwrap[C](clazz: Class[C]): C = context.unwrap(clazz)
+
+        override def getCatalogManager: CatalogManager = clusterContext.getCatalogManager
       }
       new FlinkRelBuilder(mergedContext, cluster, schema)
     }
