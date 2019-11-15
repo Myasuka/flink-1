@@ -911,7 +911,7 @@ public class ContinuousFileProcessingTest {
 			new TimestampedFileInputSplit(0, 3, new Path("test/test1"), 0, 100, null);
 
 		TimestampedFileInputSplit splitSkipped =
-			new TimestampedFileInputSplit(11, 0, toBeDeletePath, 0, 100, null);
+			new TimestampedFileInputSplit(0, 1, toBeDeletePath, 0, 100, null);
 
 		final OneShotLatch latch = new OneShotLatch();
 
@@ -954,6 +954,9 @@ public class ContinuousFileProcessingTest {
 		synchronized (initTestInstance.getCheckpointLock()) {
 			initTestInstance.close();
 		}
+
+		restoredTestInstance.processElement(new StreamRecord<>(splitRegular));
+		restoredTestInstance.processElement(new StreamRecord<>(splitSkipped));
 
 		synchronized (restoredTestInstance.getCheckpointLock()) {
 			restoredTestInstance.close();
