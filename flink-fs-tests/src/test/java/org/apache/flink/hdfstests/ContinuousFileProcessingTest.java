@@ -945,6 +945,7 @@ public class ContinuousFileProcessingTest {
 
 		//Remove a path and the job should continue
 		hdfs.delete(new org.apache.hadoop.fs.Path(toBeDeletePath.getPath()), false);
+		Assert.assertFalse(hdfs.exists(new org.apache.hadoop.fs.Path(toBeDeletePath.getPath())));
 
 		restoredTestInstance.initializeState(snapshot);
 		restoredTestInstance.open();
@@ -955,8 +956,7 @@ public class ContinuousFileProcessingTest {
 			initTestInstance.close();
 		}
 
-		restoredTestInstance.processElement(new StreamRecord<>(splitRegular));
-		restoredTestInstance.processElement(new StreamRecord<>(splitSkipped));
+		restoredTestInstance.processWatermark(1L);
 
 		synchronized (restoredTestInstance.getCheckpointLock()) {
 			restoredTestInstance.close();
