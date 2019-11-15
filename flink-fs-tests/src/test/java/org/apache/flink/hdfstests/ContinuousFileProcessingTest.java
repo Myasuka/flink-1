@@ -944,19 +944,20 @@ public class ContinuousFileProcessingTest {
 		restoredTestInstance.setTimeCharacteristic(TimeCharacteristic.EventTime);
 
 		//Remove a path and the job should continue
+		Assert.assertTrue(hdfs.exists(new org.apache.hadoop.fs.Path(toBeDeletePath.getPath())));
 		hdfs.delete(new org.apache.hadoop.fs.Path(toBeDeletePath.getPath()), false);
 		Assert.assertFalse(hdfs.exists(new org.apache.hadoop.fs.Path(toBeDeletePath.getPath())));
 
 		restoredTestInstance.initializeState(snapshot);
 		restoredTestInstance.open();
+		restoredTestInstance.processElement(new StreamRecord<>(splitRegular));
+		restoredTestInstance.processElement(new StreamRecord<>(splitSkipped));
 
 		latch.trigger();
 
 		synchronized (initTestInstance.getCheckpointLock()) {
 			initTestInstance.close();
 		}
-
-		restoredTestInstance.processWatermark(1L);
 
 		synchronized (restoredTestInstance.getCheckpointLock()) {
 			restoredTestInstance.close();
