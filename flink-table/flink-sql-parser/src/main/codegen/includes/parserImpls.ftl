@@ -177,6 +177,19 @@ SqlDescribeDatabase SqlDescribeDatabase() :
 
 }
 
+/**
+* Parse a "Show Tables" metadata query command.
+*/
+SqlShowTables SqlShowTables() :
+{
+}
+{
+    <SHOW> <TABLES>
+    {
+        return new SqlShowTables(getPos());
+    }
+}
+
 void TableColumn(TableCreationContext context) :
 {
 }
