@@ -37,6 +37,7 @@
     "org.apache.flink.sql.parser.ddl.SqlCreateDatabase",
     "org.apache.flink.sql.parser.ddl.SqlDropDatabase",
     "org.apache.flink.sql.parser.ddl.SqlAlterDatabase",
+    "org.apache.flink.sql.parser.ddl.SqlAlterTable",
     "org.apache.flink.sql.parser.dml.RichSqlInsert",
     "org.apache.flink.sql.parser.dml.RichSqlInsertKeyword",
     "org.apache.flink.sql.parser.dql.SqlShowCatalogs",
@@ -71,7 +72,8 @@
     "USE",
     "DATABASES",
     "EXTENDED",
-    "TABLES"
+    "TABLES",
+    "RENAME"
   ]
 
   # List of keywords from "keywords" section that are not reserved.
@@ -252,6 +254,7 @@
     "QUARTER"
     "READ"
     "RELATIVE"
+    "RENAME"
     "REPEATABLE"
     "REPLACE"
     "RESPECT"
@@ -403,7 +406,8 @@
     "SqlAlterDatabase()",
     "SqlDescribeDatabase()",
     "SqlShowTables()",
-    "SqlRichDescribeTable()"
+    "SqlRichDescribeTable()",
+    "SqlAlterTable()"
   ]
 
   # List of methods for parsing custom literals.
