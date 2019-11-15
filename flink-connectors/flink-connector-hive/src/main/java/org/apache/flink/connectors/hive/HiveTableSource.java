@@ -18,18 +18,22 @@
 
 package org.apache.flink.connectors.hive;
 
-import org.apache.flink.api.common.io.InputFormat;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.java.typeutils.RowTypeInfo;
+import org.apache.flink.configuration.Configuration;
+import org.apache.flink.configuration.GlobalConfiguration;
+import org.apache.flink.streaming.api.datastream.DataStream;
+import org.apache.flink.streaming.api.datastream.DataStreamSource;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.table.api.TableSchema;
 import org.apache.flink.table.catalog.CatalogTable;
 import org.apache.flink.table.catalog.ObjectPath;
 import org.apache.flink.table.catalog.hive.client.HiveMetastoreClientFactory;
 import org.apache.flink.table.catalog.hive.client.HiveMetastoreClientWrapper;
 import org.apache.flink.table.catalog.hive.descriptors.HiveCatalogValidator;
-import org.apache.flink.table.sources.InputFormatTableSource;
 import org.apache.flink.table.sources.PartitionableTableSource;
 import org.apache.flink.table.sources.ProjectableTableSource;
+import org.apache.flink.table.sources.StreamTableSource;
 import org.apache.flink.table.sources.TableSource;
 import org.apache.flink.table.types.DataType;
 import org.apache.flink.table.types.logical.LogicalTypeRoot;
@@ -44,6 +48,7 @@ import org.apache.thrift.TException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.sql.Date;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -51,10 +56,15 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import static org.apache.flink.connectors.hive.HiveOptions.TABLE_EXEC_HIVE_INFER_SOURCE_PARALLELISM;
+import static org.apache.flink.connectors.hive.HiveOptions.TABLE_EXEC_HIVE_INFER_SOURCE_PARALLELISM_MAX;
+import static org.apache.flink.table.runtime.types.TypeInfoDataTypeConverter.fromDataTypeToTypeInfo;
+import static org.apache.flink.table.utils.TableConnectorUtils.generateRuntimeName;
+
 /**
  * A TableSource implementation to read data from Hive tables.
  */
-public class HiveTableSource extends InputFormatTableSource<Row> implements PartitionableTableSource, ProjectableTableSource<Row> {
+public class HiveTableSource implements StreamTableSource<Row>, PartitionableTableSource, ProjectableTableSource<Row> {
 
 	private static Logger logger = LoggerFactory.getLogger(HiveTableSource.class);
 
@@ -100,10 +110,35 @@ public class HiveTableSource extends InputFormatTableSource<Row> implements Part
 	}
 
 	@Override
-	public InputFormat getInputFormat() {
+	public boolean isBounded() {
+		return true;
+	}
+
+	@Override
+	public DataStream<Row> getDataStream(StreamExecutionEnvironment execEnv) {
 		if (!initAllPartitions) {
 			initAllPartitions();
 		}
+		@SuppressWarnings("unchecked")
+		TypeInformation<Row> typeInfo = (TypeInformation<Row>) fromDataTypeToTypeInfo(getProducedDataType());
+		HiveTableInputFormat inputFormat = getInputFormat();
+		DataStreamSource<Row> source = execEnv.createInput(inputFormat, typeInfo);
+
+		Configuration conf = GlobalConfiguration.loadConfiguration();
+		if (conf.getBoolean(TABLE_EXEC_HIVE_INFER_SOURCE_PARALLELISM)) {
+			int max = conf.getInteger(TABLE_EXEC_HIVE_INFER_SOURCE_PARALLELISM_MAX);
+			int splitNum;
+			try {
+				splitNum = inputFormat.createInputSplits(0).length;
+			} catch (IOException e) {
+				throw new FlinkHiveException(e);
+			}
+			source.setParallelism(Math.min(Math.max(1, splitNum), max));
+		}
+		return source;
+	}
+
+	private HiveTableInputFormat getInputFormat() {
 		return new HiveTableInputFormat(jobConf, catalogTable, allHivePartitions, projectedFields);
 	}
 
@@ -242,7 +277,7 @@ public class HiveTableSource extends InputFormatTableSource<Row> implements Part
 		if (projectedFields != null) {
 			explain += ", ProjectedFields: " + Arrays.toString(projectedFields);
 		}
-		return super.explainSource() + explain;
+		return generateRuntimeName(getClass(), getTableSchema().getFieldNames()) + explain;
 	}
 
 	@Override
