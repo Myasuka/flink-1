@@ -23,6 +23,7 @@ import { TaskManagerListComponent } from './list/task-manager-list.component';
 import { TaskManagerLogsComponent } from './logs/task-manager-logs.component';
 import { TaskManagerMetricsComponent } from './metrics/task-manager-metrics.component';
 import { TaskManagerStdoutComponent } from './stdout/task-manager-stdout.component';
+import { TaskManagerDumpComponent } from './dump/task-manager-dump.component';
 
 const routes: Routes = [
   {
@@ -52,6 +53,13 @@ const routes: Routes = [
         component: TaskManagerStdoutComponent,
         data: {
           path: 'stdout'
+        }
+      },
+      {
+        path: 'dump',
+        component: TaskManagerDumpComponent,
+        data: {
+          path: 'dump'
         }
       },
       {

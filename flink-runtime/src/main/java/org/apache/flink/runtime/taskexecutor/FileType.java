@@ -22,6 +22,18 @@ package org.apache.flink.runtime.taskexecutor;
  * Different file types to request from the {@link TaskExecutor}.
  */
 public enum FileType {
+	/**
+	 * log
+	 */
 	LOG,
-	STDOUT
+
+	/**
+	 * stdout
+	 */
+	STDOUT,
+
+	/**
+	 * dump
+	 */
+	DUMP
 }

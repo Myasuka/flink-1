@@ -65,5 +65,13 @@ export class TaskManagerService {
     return this.httpClient.get(`${BASE_URL}/taskmanagers/${taskManagerId}/stdout`, { responseType: 'text' });
   }
 
+  /**
+   * Load TM dump
+   * @param taskManagerId
+   */
+  loadDump(taskManagerId: string) {
+    return this.httpClient.get(`${BASE_URL}/taskmanagers/${taskManagerId}/dump`, { responseType: 'text' });
+  }
+
   constructor(private httpClient: HttpClient) {}
 }
