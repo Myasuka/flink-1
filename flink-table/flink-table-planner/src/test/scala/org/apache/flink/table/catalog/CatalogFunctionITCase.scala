@@ -73,13 +73,41 @@ class CatalogFunctionITCase(isStreaming: Boolean) {
   }
 
   @Test
+  def testCreateSystemFunction(): Unit = {
+    val ddl1 =
+      """
+        |create temporary system function f2
+        |  as 'org.apache.flink.function.TestFunction'
+      """.stripMargin
+    tableEnv.sqlUpdate(ddl1)
+    assert(tableEnv.listFunctions().contains("f2"))
+
+    tableEnv.sqlUpdate("DROP TEMPORARY SYSTEM FUNCTION IF EXISTS catalog1.database1.f2")
+    assert(tableEnv.listFunctions().contains("f2"))
+  }
+
+  @Test
   def testCreateFunctionWithFullPath(): Unit = {
-    val ddl2 =
+    val ddl1 =
       """
         |create temporary function default_catalog.default_database.f2
         |  as 'org.apache.flink.function.TestFunction'
       """.stripMargin
-    tableEnv.sqlUpdate(ddl2)
+    tableEnv.sqlUpdate(ddl1)
+    assert(tableEnv.listFunctions().contains("f2"))
+
+    tableEnv.sqlUpdate("DROP TEMPORARY FUNCTION IF EXISTS default_catalog.default_database.f2")
+    assert(!tableEnv.listFunctions().contains("f2"))
+  }
+
+  @Test
+  def testCreateFunctionWithLanguage(): Unit = {
+    val ddl1 =
+      """
+        |create temporary function default_catalog.default_database.f2
+        |  as 'org.apache.flink.function.TestFunction' language 'SCALA'
+      """.stripMargin
+    tableEnv.sqlUpdate(ddl1)
     assert(tableEnv.listFunctions().contains("f2"))
 
     tableEnv.sqlUpdate("DROP TEMPORARY FUNCTION IF EXISTS default_catalog.default_database.f2")
