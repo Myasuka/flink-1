@@ -825,11 +825,11 @@ under the License.
 						<groupId>org.apache.maven.plugins</groupId>
 						<artifactId>maven-compiler-plugin</artifactId>
 						<configuration>
-							<source>8</source>
-							<target>8</target>
+							<source>11</source>
+							<target>11</target>
 							<compilerArgs combine.children="append">
-<!--								<arg>&#45;&#45;add-exports=java.base/sun.net.util=ALL-UNNAMED</arg>-->
-<!--								<arg>&#45;&#45;add-exports=java.management/sun.management=ALL-UNNAMED</arg>-->
+								<arg>--add-exports=java.base/sun.net.util=ALL-UNNAMED</arg>
+								<arg>--add-exports=java.management/sun.management=ALL-UNNAMED</arg>
 							</compilerArgs>
 						</configuration>
 					</plugin>
