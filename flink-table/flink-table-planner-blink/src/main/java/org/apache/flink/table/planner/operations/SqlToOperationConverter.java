@@ -29,10 +29,10 @@ import org.apache.flink.table.api.TableException;
 import org.apache.flink.table.api.TableSchema;
 import org.apache.flink.table.catalog.CatalogFunction;
 import org.apache.flink.table.catalog.CatalogFunctionImpl;
-import org.apache.flink.table.catalog.Language;
 import org.apache.flink.table.catalog.CatalogManager;
 import org.apache.flink.table.catalog.CatalogTable;
 import org.apache.flink.table.catalog.CatalogTableImpl;
+import org.apache.flink.table.catalog.Language;
 import org.apache.flink.table.catalog.ObjectIdentifier;
 import org.apache.flink.table.catalog.UnresolvedIdentifier;
 import org.apache.flink.table.operations.CatalogSinkModifyOperation;
@@ -188,9 +188,11 @@ public class SqlToOperationConverter {
 	private Operation convertDropFunction(SqlDropFunction sqlDropFunction) {
 		UnresolvedIdentifier unresolvedIdentifier = UnresolvedIdentifier.of(sqlDropFunction.fullFunctionName());
 		ObjectIdentifier identifier = catalogManager.qualifyIdentifier(unresolvedIdentifier);
+		Language language = sqlDropFunction.getFunctionLanguage() == null
+			? Language.JAVA : Language.valueOf(sqlDropFunction.getFunctionLanguage().toValue());
 		return  new DropFunctionOperation(
 			identifier,
-			Language.valueOf(sqlDropFunction.getFunctionLanguage().toValue()),
+			language,
 			sqlDropFunction.getIfExists());
 	}
 
