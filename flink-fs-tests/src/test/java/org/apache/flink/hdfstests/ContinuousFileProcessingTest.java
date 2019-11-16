@@ -915,19 +915,19 @@ public class ContinuousFileProcessingTest {
 
 		final OneShotLatch latch = new OneShotLatch();
 
-		BlockingFileInputFormat format = new BlockingFileInputFormat(latch, new Path(testBasePath));
-		TypeInformation<FileInputSplit> typeInfo = TypeExtractor.getInputFormatTypes(format);
+		TextInputFormat format = new TextInputFormat(new Path(testBasePath));
+		TypeInformation<String> typeInfo = TypeExtractor.getInputFormatTypes(format);
 
-		ContinuousFileReaderOperator<FileInputSplit> initReader = new ContinuousFileReaderOperator<>(format);
+		ContinuousFileReaderOperator<String> initReader = new ContinuousFileReaderOperator<>(format);
 		initReader.setOutputType(typeInfo, new ExecutionConfig());
 
-		FileInputSplit[] splits = format.createInputSplits(
-			initReader.getRuntimeContext().getNumberOfParallelSubtasks());
-
-		OneInputStreamOperatorTestHarness<TimestampedFileInputSplit, FileInputSplit> initTestInstance =
+		OneInputStreamOperatorTestHarness<TimestampedFileInputSplit, String> initTestInstance =
 			new OneInputStreamOperatorTestHarness<>(initReader);
 		initTestInstance.setTimeCharacteristic(TimeCharacteristic.EventTime);
 		initTestInstance.open();
+
+		FileInputSplit[] splits = format.createInputSplits(
+			initReader.getRuntimeContext().getNumberOfParallelSubtasks());
 
 		for (FileInputSplit split: splits) {
 			initTestInstance.processElement(new StreamRecord<>(
@@ -941,11 +941,11 @@ public class ContinuousFileProcessingTest {
 			snapshot = initTestInstance.snapshot(0L, 0L);
 		}
 
-		ContinuousFileReaderOperator<FileInputSplit> restoredReader = new ContinuousFileReaderOperator<>(
-			new BlockingFileInputFormat(latch, new Path(testBasePath)), FileMissingSplitsMode.FAIL_ON_MISSING_SPLITS);
+		ContinuousFileReaderOperator<String> restoredReader = new ContinuousFileReaderOperator<>(
+			format, FileMissingSplitsMode.FAIL_ON_MISSING_SPLITS);
 		restoredReader.setOutputType(typeInfo, new ExecutionConfig());
 
-		OneInputStreamOperatorTestHarness<TimestampedFileInputSplit, FileInputSplit> restoredTestInstance  =
+		OneInputStreamOperatorTestHarness<TimestampedFileInputSplit, String> restoredTestInstance  =
 			new OneInputStreamOperatorTestHarness<>(restoredReader);
 		restoredTestInstance.setTimeCharacteristic(TimeCharacteristic.EventTime);
 
