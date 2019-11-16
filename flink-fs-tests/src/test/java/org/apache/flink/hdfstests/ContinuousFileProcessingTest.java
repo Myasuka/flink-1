@@ -905,13 +905,13 @@ public class ContinuousFileProcessingTest {
 	public void testSkipMissingSplits() throws Exception {
 		String testBasePath = hdfsURI + "/" + UUID.randomUUID() + "/";
 
-		Path toBeDeletePath = new Path("test/test3");
-
-		TimestampedFileInputSplit splitRegular =
-			new TimestampedFileInputSplit(0, 3, new Path("test/test1"), 0, 100, null);
-
-		TimestampedFileInputSplit splitSkipped =
-			new TimestampedFileInputSplit(0, 1, toBeDeletePath, 0, 100, null);
+		Set<org.apache.hadoop.fs.Path> filesCreated = new HashSet<>();
+		Map<String, Long> modTimes = new HashMap<>();
+		for (int i = 0; i < 2; i++) {
+			Tuple2<org.apache.hadoop.fs.Path, String> file = createFileAndFillWithData(testBasePath, "file", i, "This is test line.");
+			filesCreated.add(file.f0);
+			modTimes.put(file.f0.getName(), hdfs.getFileStatus(file.f0).getModificationTime());
+		}
 
 		final OneShotLatch latch = new OneShotLatch();
 
@@ -921,14 +921,20 @@ public class ContinuousFileProcessingTest {
 		ContinuousFileReaderOperator<FileInputSplit> initReader = new ContinuousFileReaderOperator<>(format);
 		initReader.setOutputType(typeInfo, new ExecutionConfig());
 
+		FileInputSplit[] splits = format.createInputSplits(
+			initReader.getRuntimeContext().getNumberOfParallelSubtasks());
+
 		OneInputStreamOperatorTestHarness<TimestampedFileInputSplit, FileInputSplit> initTestInstance =
 			new OneInputStreamOperatorTestHarness<>(initReader);
 		initTestInstance.setTimeCharacteristic(TimeCharacteristic.EventTime);
 		initTestInstance.open();
 
-		// create some state in the reader
-		initTestInstance.processElement(new StreamRecord<>(splitRegular));
-		initTestInstance.processElement(new StreamRecord<>(splitSkipped));
+		for (FileInputSplit split: splits) {
+			initTestInstance.processElement(new StreamRecord<>(
+				new TimestampedFileInputSplit(modTimes.get(split.getPath().getName()),
+					split.getSplitNumber(), split.getPath(), split.getStart(),
+					split.getLength(), split.getHostnames())));
+		}
 
 		final OperatorSubtaskState snapshot;
 		synchronized (initTestInstance.getCheckpointLock()) {
@@ -944,14 +950,10 @@ public class ContinuousFileProcessingTest {
 		restoredTestInstance.setTimeCharacteristic(TimeCharacteristic.EventTime);
 
 		//Remove a path and the job should continue
-		Assert.assertTrue(hdfs.exists(new org.apache.hadoop.fs.Path(toBeDeletePath.getPath())));
-		hdfs.delete(new org.apache.hadoop.fs.Path(toBeDeletePath.getPath()), false);
-		Assert.assertFalse(hdfs.exists(new org.apache.hadoop.fs.Path(toBeDeletePath.getPath())));
+		hdfs.delete(filesCreated.iterator().next(), false);
 
 		restoredTestInstance.initializeState(snapshot);
 		restoredTestInstance.open();
-		restoredTestInstance.processElement(new StreamRecord<>(splitRegular));
-		restoredTestInstance.processElement(new StreamRecord<>(splitSkipped));
 
 		latch.trigger();
 
@@ -959,15 +961,18 @@ public class ContinuousFileProcessingTest {
 			initTestInstance.close();
 		}
 
+		for (FileInputSplit split: splits) {
+			restoredReader.processElement(new StreamRecord<>(
+				new TimestampedFileInputSplit(modTimes.get(split.getPath().getName()),
+					split.getSplitNumber(), split.getPath(), split.getStart(),
+					split.getLength(), split.getHostnames())));
+		}
+
 		synchronized (restoredTestInstance.getCheckpointLock()) {
 			restoredTestInstance.close();
 		}
 
-		FileInputSplit fsSplit1 = createSplitFromTimestampedSplit(splitRegular);
-		FileInputSplit fsSplit2 = createSplitFromTimestampedSplit(splitSkipped);
-
-		Assert.assertTrue(restoredTestInstance.getOutput().contains(new StreamRecord<>(fsSplit1)));
-		Assert.assertTrue(restoredTestInstance.getOutput().contains(new StreamRecord<>(fsSplit2)));
+		Assert.assertEquals(restoredTestInstance.getOutput().size(), 1);
 	}
 
 	///////////				Source Contexts Used by the tests				/////////////////
