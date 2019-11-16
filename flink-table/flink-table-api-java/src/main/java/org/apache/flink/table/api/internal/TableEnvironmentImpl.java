@@ -480,7 +480,7 @@ public class TableEnvironmentImpl implements TableEnvironment {
 				createFunctionOperation.getCatalogFunction(),
 				createFunctionOperation.getFunctionIdentifier(),
 				createFunctionOperation.isIgnoreIfExists());
-		} else if (operation instanceof DropTableOperation) {
+		} else if (operation instanceof DropFunctionOperation) {
 			DropFunctionOperation dropFunctionOperation = (DropFunctionOperation) operation;
 			catalogManager.dropFunction(
 				dropFunctionOperation.getFunctionIdentifier(),

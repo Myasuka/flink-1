@@ -18,7 +18,9 @@
 
 package org.apache.flink.table.planner.operations;
 
+import org.apache.flink.sql.parser.ddl.SqlCreateFunction;
 import org.apache.flink.sql.parser.ddl.SqlCreateTable;
+import org.apache.flink.sql.parser.ddl.SqlDropFunction;
 import org.apache.flink.table.api.DataTypes;
 import org.apache.flink.table.api.SqlDialect;
 import org.apache.flink.table.api.TableColumn;
@@ -32,6 +34,7 @@ import org.apache.flink.table.catalog.CatalogTable;
 import org.apache.flink.table.catalog.CatalogTableImpl;
 import org.apache.flink.table.catalog.FunctionCatalog;
 import org.apache.flink.table.catalog.GenericInMemoryCatalog;
+import org.apache.flink.table.catalog.Language;
 import org.apache.flink.table.catalog.ObjectIdentifier;
 import org.apache.flink.table.catalog.ObjectPath;
 import org.apache.flink.table.catalog.exceptions.DatabaseNotExistException;
@@ -429,21 +432,56 @@ public class SqlToOperationConverterTest {
 
 	@Test
 	public void testCreateFunction() {
-		final String sql = "CREATE FUNCTION func1 AS 'org.apache.flink.function.function1'";
+		final String sql = "CREATE TEMPORARY FUNCTION func1 AS 'org.apache.flink.function.function1'";
 		final FlinkPlannerImpl planner = getPlannerBySqlDialect(SqlDialect.DEFAULT);
-		Operation operation = parse(sql, planner, getParserBySqlDialect(SqlDialect.DEFAULT));
+		SqlNode node = getParserBySqlDialect(SqlDialect.DEFAULT).parse(sql);
+		assert node instanceof SqlCreateFunction;
+		Operation operation = SqlToOperationConverter.convert(planner, catalogManager, node).get();
 		assert operation instanceof CreateFunctionOperation;
 		CreateFunctionOperation op = (CreateFunctionOperation) operation;
 		CatalogFunction catalogFunction = op.getCatalogFunction();
 		assertEquals("org.apache.flink.function.function1", catalogFunction.getClassName());
+		assertEquals(Boolean.FALSE, catalogFunction.isSystemFunction());
+		assertEquals(Language.JAVA, catalogFunction.getLanguage());
+	}
+
+	@Test
+	public void testCreateSystemFunctionWithLanguage() {
+		final String sql = "CREATE TEMPORARY SYSTEM FUNCTION func1 AS 'org.apache.flink.function.function1' LANGUAGE 'SCALA'";
+		final FlinkPlannerImpl planner = getPlannerBySqlDialect(SqlDialect.DEFAULT);
+		SqlNode node = getParserBySqlDialect(SqlDialect.DEFAULT).parse(sql);
+		assert node instanceof SqlCreateFunction;
+		Operation operation = SqlToOperationConverter.convert(planner, catalogManager, node).get();
+		assert operation instanceof CreateFunctionOperation;
+		CreateFunctionOperation op = (CreateFunctionOperation) operation;
+		CatalogFunction catalogFunction = op.getCatalogFunction();
+		assertEquals("org.apache.flink.function.function1", catalogFunction.getClassName());
+		assertEquals(Boolean.TRUE, catalogFunction.isSystemFunction());
+		assertEquals(Language.SCALA, catalogFunction.getLanguage());
 	}
 
 	@Test
 	public void testDropFunction() {
-		final String sql = "DROP FUNCTION func1";
+		final String sql = "DROP TEMPORARY FUNCTION func1";
 		final FlinkPlannerImpl planner = getPlannerBySqlDialect(SqlDialect.DEFAULT);
-		Operation operation = parse(sql, planner, getParserBySqlDialect(SqlDialect.DEFAULT));
+		SqlNode node = getParserBySqlDialect(SqlDialect.DEFAULT).parse(sql);
+		assert node instanceof SqlDropFunction;
+		Operation operation = SqlToOperationConverter.convert(planner, catalogManager, node).get();
 		assert operation instanceof DropFunctionOperation;
+		DropFunctionOperation op = (DropFunctionOperation) operation;
+		assertEquals(Language.JAVA, op.getLanguage());
+	}
+
+	@Test
+	public void testDropSystemFunctionWithLanguage() {
+		final String sql = "DROP TEMPORARY SYSTEM FUNCTION func1 LANGUAGE 'SCALA'";
+		final FlinkPlannerImpl planner = getPlannerBySqlDialect(SqlDialect.DEFAULT);
+		SqlNode node = getParserBySqlDialect(SqlDialect.DEFAULT).parse(sql);
+		assert node instanceof SqlDropFunction;
+		Operation operation = SqlToOperationConverter.convert(planner, catalogManager, node).get();
+		assert operation instanceof DropFunctionOperation;
+		DropFunctionOperation op = (DropFunctionOperation) operation;
+		assertEquals(Language.SCALA, op.getLanguage());
 	}
 
 	//~ Tool Methods ----------------------------------------------------------
