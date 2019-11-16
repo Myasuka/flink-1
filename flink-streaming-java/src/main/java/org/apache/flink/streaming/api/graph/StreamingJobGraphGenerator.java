@@ -167,7 +167,11 @@ public class StreamingJobGraphGenerator {
 
 		setSlotSharingAndCoLocation();
 
-		setManagedMemoryFraction();
+		setManagedMemoryFraction(
+			Collections.unmodifiableMap(jobVertices),
+			Collections.unmodifiableMap(vertexConfigs),
+			Collections.unmodifiableMap(chainedConfigs),
+			id -> streamGraph.getStreamNode(id).getMinResources());
 
 		configureCheckpointing();
 
@@ -690,11 +694,18 @@ public class StreamingJobGraphGenerator {
 		}
 	}
 
-	private void setManagedMemoryFraction() {
+	private static void setManagedMemoryFraction(
+			final Map<Integer, JobVertex> jobVertices,
+			final Map<Integer, StreamConfig> operatorConfigs,
+			final Map<Integer, Map<Integer, StreamConfig>> vertexChainedConfigs,
+			final java.util.function.Function<Integer, ResourceSpec> operatorResourceRetriever) {
+
 		// all slot sharing groups in this job
 		final Set<SlotSharingGroup> slotSharingGroups = Collections.newSetFromMap(new IdentityHashMap<>());
+
 		// maps a job vertex ID to its head operator ID
 		final Map<JobVertexID, Integer> vertexHeadOperators = new HashMap<>();
+
 		// maps a job vertex ID to IDs of all operators in the vertex
 		final Map<JobVertexID, Set<Integer>> vertexOperators = new HashMap<>();
 
@@ -711,19 +722,28 @@ public class StreamingJobGraphGenerator {
 
 			final Set<Integer> operatorIds = new HashSet<>();
 			operatorIds.add(headOperatorId);
-			operatorIds.addAll(chainedConfigs.getOrDefault(headOperatorId, Collections.emptyMap()).keySet());
+			operatorIds.addAll(vertexChainedConfigs.getOrDefault(headOperatorId, Collections.emptyMap()).keySet());
 			vertexOperators.put(jobVertex.getID(), operatorIds);
 		}
 
 		for (SlotSharingGroup slotSharingGroup : slotSharingGroups) {
-			setManagedMemoryFractionForSlotSharingGroup(slotSharingGroup, vertexHeadOperators, vertexOperators);
+			setManagedMemoryFractionForSlotSharingGroup(
+				slotSharingGroup,
+				vertexHeadOperators,
+				vertexOperators,
+				operatorConfigs,
+				vertexChainedConfigs,
+				operatorResourceRetriever);
 		}
 	}
 
-	private void setManagedMemoryFractionForSlotSharingGroup(
+	private static void setManagedMemoryFractionForSlotSharingGroup(
 			final SlotSharingGroup slotSharingGroup,
 			final Map<JobVertexID, Integer> vertexHeadOperators,
-			final Map<JobVertexID, Set<Integer>> vertexOperators) {
+			final Map<JobVertexID, Set<Integer>> vertexOperators,
+			final Map<Integer, StreamConfig> operatorConfigs,
+			final Map<Integer, Map<Integer, StreamConfig>> vertexChainedConfigs,
+			final java.util.function.Function<Integer, ResourceSpec> operatorResourceRetriever) {
 
 		final int groupOperatorCount = slotSharingGroup.getJobVertexIds().stream()
 			.map(vertexOperators::get)
@@ -732,8 +752,8 @@ public class StreamingJobGraphGenerator {
 
 		for (JobVertexID jobVertexID : slotSharingGroup.getJobVertexIds()) {
 			for (int operatorNodeId : vertexOperators.get(jobVertexID)) {
-				final StreamConfig operatorConfig = vertexConfigs.get(operatorNodeId);
-				final ResourceSpec operatorResourceSpec = streamGraph.getStreamNode(operatorNodeId).getMinResources();
+				final StreamConfig operatorConfig = operatorConfigs.get(operatorNodeId);
+				final ResourceSpec operatorResourceSpec = operatorResourceRetriever.apply(operatorNodeId);
 				setManagedMemoryFractionForOperator(
 					operatorResourceSpec,
 					slotSharingGroup.getResourceSpec(),
@@ -743,12 +763,12 @@ public class StreamingJobGraphGenerator {
 
 			// need to refresh the chained task configs because they are serialized
 			final int headOperatorNodeId = vertexHeadOperators.get(jobVertexID);
-			final StreamConfig vertexConfig = vertexConfigs.get(headOperatorNodeId);
-			vertexConfig.setTransitiveChainedTaskConfigs(chainedConfigs.get(headOperatorNodeId));
+			final StreamConfig vertexConfig = operatorConfigs.get(headOperatorNodeId);
+			vertexConfig.setTransitiveChainedTaskConfigs(vertexChainedConfigs.get(headOperatorNodeId));
 		}
 	}
 
-	private void setManagedMemoryFractionForOperator(
+	private static void setManagedMemoryFractionForOperator(
 			final ResourceSpec operatorResourceSpec,
 			final ResourceSpec groupResourceSpec,
 			final int groupOperatorCount,
