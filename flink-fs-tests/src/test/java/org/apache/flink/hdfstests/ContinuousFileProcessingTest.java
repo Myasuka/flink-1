@@ -956,7 +956,7 @@ public class ContinuousFileProcessingTest {
 		restoredTestInstance.open();
 
 		for (FileInputSplit split: splits) {
-			restoredReader.processElement(new StreamRecord<>(
+			restoredTestInstance.processElement(new StreamRecord<>(
 				new TimestampedFileInputSplit(modTimes.get(split.getPath().getName()),
 					split.getSplitNumber(), split.getPath(), split.getStart(),
 					split.getLength(), split.getHostnames())));
@@ -968,11 +968,13 @@ public class ContinuousFileProcessingTest {
 			initTestInstance.close();
 		}
 
+		restoredTestInstance.setProcessingTime(restoredTestInstance.getProcessingTime() + 10L);
+
 		synchronized (restoredTestInstance.getCheckpointLock()) {
 			restoredTestInstance.close();
 		}
 
-		Assert.assertEquals(initTestInstance.getOutput().size(), 2 * LINES_PER_FILE);
+		Assert.assertEquals(initTestInstance.getOutput().size(), 1);
 		Assert.assertEquals(restoredTestInstance.getOutput().size(), LINES_PER_FILE);
 	}
 
