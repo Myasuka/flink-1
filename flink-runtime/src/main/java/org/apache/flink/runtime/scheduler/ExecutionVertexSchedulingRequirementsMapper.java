@@ -40,7 +40,8 @@ final class ExecutionVertexSchedulingRequirementsMapper {
 		return new ExecutionVertexSchedulingRequirements.Builder()
 			.withExecutionVertexId(executionVertexId)
 			.withPreviousAllocationId(latestPriorAllocation)
-			.withResourceProfile(executionVertex.getResourceProfile())
+			.withTaskResourceProfile(executionVertex.getResourceProfile())
+			.withPhysicalSlotResourceProfile(executionVertex.getPhysicalSlotResourceProfile())
 			.withSlotSharingGroupId(slotSharingGroup == null ? null : slotSharingGroup.getSlotSharingGroupId())
 			.withCoLocationConstraint(executionVertex.getLocationConstraint())
 			.withPreferredLocations(getPreferredLocationBasedOnState(executionVertex)).build();

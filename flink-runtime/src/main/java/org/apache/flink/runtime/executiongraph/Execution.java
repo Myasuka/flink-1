@@ -546,6 +546,7 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 							toSchedule,
 							SlotProfile.priorAllocation(
 								vertex.getResourceProfile(),
+								vertex.getPhysicalSlotResourceProfile(),
 								preferredLocations,
 								previousAllocationIDs,
 								allPreviousExecutionGraphAllocationIds)));
