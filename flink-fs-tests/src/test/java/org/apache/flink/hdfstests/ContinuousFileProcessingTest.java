@@ -950,7 +950,10 @@ public class ContinuousFileProcessingTest {
 		restoredTestInstance.setTimeCharacteristic(TimeCharacteristic.EventTime);
 
 		//Remove a path and the job should continue
-		hdfs.delete(filesCreated.iterator().next(), false);
+		org.apache.hadoop.fs.Path fileDelete = filesCreated.iterator().next();
+		Assert.assertTrue(hdfs.exists(fileDelete));
+		hdfs.delete(fileDelete, false);
+		Assert.assertFalse(hdfs.exists(fileDelete));
 
 		restoredTestInstance.initializeState(snapshot);
 		restoredTestInstance.open();
@@ -968,14 +971,12 @@ public class ContinuousFileProcessingTest {
 			initTestInstance.close();
 		}
 
-		restoredTestInstance.setProcessingTime(restoredTestInstance.getProcessingTime() + 10L);
-
 		synchronized (restoredTestInstance.getCheckpointLock()) {
 			restoredTestInstance.close();
 		}
 
-		Assert.assertEquals(initTestInstance.getOutput().size(), 5);
-		Assert.assertEquals(restoredTestInstance.getOutput().size(), 4);
+		Assert.assertEquals(initTestInstance.getOutput().size(), NO_OF_FILES * LINES_PER_FILE + 1);
+		Assert.assertEquals(restoredTestInstance.getOutput().size(), NO_OF_FILES * LINES_PER_FILE + 1);
 	}
 
 	///////////				Source Contexts Used by the tests				/////////////////
