@@ -976,7 +976,7 @@ public class ContinuousFileProcessingTest {
 		}
 
 		Assert.assertEquals(initTestInstance.getOutput().size(), NO_OF_FILES * LINES_PER_FILE + 1);
-		Assert.assertEquals(restoredTestInstance.getOutput().size(), NO_OF_FILES * LINES_PER_FILE + 1);
+		Assert.assertEquals(restoredTestInstance.getOutput().size(), NO_OF_FILES * (LINES_PER_FILE - 1) + 1);
 	}
 
 	///////////				Source Contexts Used by the tests				/////////////////
