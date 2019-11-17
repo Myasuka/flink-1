@@ -907,7 +907,7 @@ public class ContinuousFileProcessingTest {
 
 		Set<org.apache.hadoop.fs.Path> filesCreated = new HashSet<>();
 		Map<String, Long> modTimes = new HashMap<>();
-		for (int i = 0; i < 2; i++) {
+		for (int i = 0; i < NO_OF_FILES; i++) {
 			Tuple2<org.apache.hadoop.fs.Path, String> file = createFileAndFillWithData(testBasePath, "file", i, "This is test line.");
 			filesCreated.add(file.f0);
 			modTimes.put(file.f0.getName(), hdfs.getFileStatus(file.f0).getModificationTime());
@@ -974,8 +974,8 @@ public class ContinuousFileProcessingTest {
 			restoredTestInstance.close();
 		}
 
-		Assert.assertEquals(initTestInstance.getOutput().size(), 1);
-		Assert.assertEquals(restoredTestInstance.getOutput().size(), LINES_PER_FILE);
+		Assert.assertEquals(initTestInstance.getOutput().size(), 5);
+		Assert.assertEquals(restoredTestInstance.getOutput().size(), 4);
 	}
 
 	///////////				Source Contexts Used by the tests				/////////////////
