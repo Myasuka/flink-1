@@ -32,6 +32,7 @@ import org.apache.flink.runtime.webmonitor.RestfulGateway;
 import org.apache.flink.runtime.webmonitor.retriever.GatewayRetriever;
 
 import javax.annotation.Nonnull;
+
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
