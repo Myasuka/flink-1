@@ -958,13 +958,6 @@ public class ContinuousFileProcessingTest {
 		restoredTestInstance.initializeState(snapshot);
 		restoredTestInstance.open();
 
-		for (FileInputSplit split: splits) {
-			restoredTestInstance.processElement(new StreamRecord<>(
-				new TimestampedFileInputSplit(modTimes.get(split.getPath().getName()),
-					split.getSplitNumber(), split.getPath(), split.getStart(),
-					split.getLength(), split.getHostnames())));
-		}
-
 		latch.trigger();
 
 		synchronized (initTestInstance.getCheckpointLock()) {
