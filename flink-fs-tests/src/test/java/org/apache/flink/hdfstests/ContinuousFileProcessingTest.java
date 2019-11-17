@@ -955,12 +955,6 @@ public class ContinuousFileProcessingTest {
 		restoredTestInstance.initializeState(snapshot);
 		restoredTestInstance.open();
 
-		latch.trigger();
-
-		synchronized (initTestInstance.getCheckpointLock()) {
-			initTestInstance.close();
-		}
-
 		for (FileInputSplit split: splits) {
 			restoredReader.processElement(new StreamRecord<>(
 				new TimestampedFileInputSplit(modTimes.get(split.getPath().getName()),
@@ -968,11 +962,18 @@ public class ContinuousFileProcessingTest {
 					split.getLength(), split.getHostnames())));
 		}
 
+		latch.trigger();
+
+		synchronized (initTestInstance.getCheckpointLock()) {
+			initTestInstance.close();
+		}
+
 		synchronized (restoredTestInstance.getCheckpointLock()) {
 			restoredTestInstance.close();
 		}
 
-		Assert.assertEquals(restoredTestInstance.getOutput().size(), 1);
+		Assert.assertEquals(initTestInstance.getOutput().size(), 2 * LINES_PER_FILE);
+		Assert.assertEquals(restoredTestInstance.getOutput().size(), LINES_PER_FILE);
 	}
 
 	///////////				Source Contexts Used by the tests				/////////////////
