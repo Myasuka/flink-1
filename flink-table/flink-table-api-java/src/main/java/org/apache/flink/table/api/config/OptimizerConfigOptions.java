@@ -93,16 +93,16 @@ public class OptimizerConfigOptions {
 				"Default value is true.");
 
 	@Documentation.TableOption(execMode = Documentation.ExecMode.BATCH_STREAMING)
-	public static final ConfigOption<String> TABLE_OPTIMIZER_JOIN_REORDER_MODE =
-		key("table.optimizer.join-reorder-mode")
+	public static final ConfigOption<String> TABLE_OPTIMIZER_JOIN_REORDER_STRATEGY =
+		key("table.optimizer.join-reorder-strategy")
 			.defaultValue("NONE")
-			.withDescription("Sets join reorder mode in optimizer. " +
+			.withDescription("Sets join reorder strategy in optimizer. " +
 				"Currently only NONE, ELIMINATE_CROSS_JOIN and COST_BASED can be set.\n" +
 				"NONE: No join reorder will be performed.\n" +
 				"ELIMINATE_CROSS_JOIN: Optimizer will try to eliminate cross joins as much as possible " +
 				"without the help of statistics.\n" +
 				"COST_BASED: Optimizer will perform join reorders according to cost-based model. " +
-				"Statistics are needed for this mode.");
+				"Statistics are needed for this strategy.");
 
 	@Deprecated
 	@Documentation.TableOption(execMode = Documentation.ExecMode.BATCH_STREAMING)
@@ -110,5 +110,5 @@ public class OptimizerConfigOptions {
 		key("table.optimizer.join-reorder-enabled")
 			.defaultValue(false)
 			.withDescription("Enables cost-based join reorder in optimizer. Default is disabled.\n" +
-				"This key is deprecated now, please use table.optimizer.join-reorder-mode instead.");
+				"This key is deprecated now, please use table.optimizer.join-reorder-strategy instead.");
 }
