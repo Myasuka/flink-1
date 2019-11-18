@@ -49,7 +49,7 @@ public class LocationPreferenceSlotSelectionStrategyTest extends SlotSelectionSt
 		SlotProfile slotProfile = SlotProfile.noLocality(biggerResourceProfile);
 
 		Optional<SlotSelectionStrategy.SlotInfoAndLocality> match = runMatching(slotProfile);
-		Assert.assertTrue(match.get().getSlotInfo().getResourceProfile().isMatching(slotProfile.getResourceProfile()));
+		Assert.assertTrue(match.get().getSlotInfo().getResourceProfile().isMatching(slotProfile.getTaskResourceProfile()));
 
 		ResourceProfile evenBiggerResourceProfile = new ResourceProfile(
 			biggerResourceProfile.getCpuCores().getValue().doubleValue() + 1.0,
@@ -113,6 +113,7 @@ public class LocationPreferenceSlotSelectionStrategyTest extends SlotSelectionSt
 		blacklisted.add(aid3);
 		blacklisted.add(aid4);
 		SlotProfile slotProfile = SlotProfile.priorAllocation(
+			resourceProfile,
 			resourceProfile,
 			Collections.singletonList(tml3),
 			Collections.singletonList(aid3),

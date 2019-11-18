@@ -79,6 +79,7 @@ public class PreviousAllocationSlotSelectionStrategyTest extends LocationPrefere
 		blacklisted.add(aid4);
 		SlotProfile slotProfile = SlotProfile.priorAllocation(
 			resourceProfile,
+			resourceProfile,
 			Collections.singletonList(tml4),
 			Collections.singletonList(aidX),
 			blacklisted);
@@ -95,6 +96,7 @@ public class PreviousAllocationSlotSelectionStrategyTest extends LocationPrefere
 		blacklisted.add(aid3);
 		blacklisted.add(aid4);
 		SlotProfile slotProfile = SlotProfile.priorAllocation(
+			resourceProfile,
 			resourceProfile,
 			Collections.singletonList(tml4),
 			Collections.singletonList(aidX),
