@@ -30,12 +30,12 @@ ONE_PHASE: Enforce to use one stage aggregate which only has CompleteGlobalAggre
             <td>Tells the optimizer whether to split distinct aggregation (e.g. COUNT(DISTINCT col), SUM(DISTINCT col)) into two level. The first aggregation is shuffled by an additional key which is calculated using the hashcode of distinct_key and number of buckets. This optimization is very useful when there is data skew in distinct aggregation and gives the ability to scale-up the job. Default is false.</td>
         </tr>
         <tr>
-            <td><h5>table.optimizer.join-reorder-mode</h5><br> <span class="label label-primary">Batch</span> <span class="label label-primary">Streaming</span></td>
+            <td><h5>table.optimizer.join-reorder-strategy</h5><br> <span class="label label-primary">Batch</span> <span class="label label-primary">Streaming</span></td>
             <td style="word-wrap: break-word;">"NONE"</td>
-            <td>Sets join reorder mode in optimizer. Currently only NONE, ELIMINATE_CROSS_JOIN and COST_BASED can be set.
+            <td>Sets join reorder strategy in optimizer. Currently only NONE, ELIMINATE_CROSS_JOIN and COST_BASED can be set.
 NONE: No join reorder will be performed.
 ELIMINATE_CROSS_JOIN: Optimizer will try to eliminate cross joins as much as possible without the help of statistics.
-COST_BASED: Optimizer will perform join reorders according to cost-based model. Statistics are needed for this mode.</td>
+COST_BASED: Optimizer will perform join reorders according to cost-based model. Statistics are needed for this strategy.</td>
         </tr>
         <tr>
             <td><h5>table.optimizer.join.broadcast-threshold</h5><br> <span class="label label-primary">Batch</span></td>

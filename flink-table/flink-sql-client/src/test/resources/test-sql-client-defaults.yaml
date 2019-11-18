@@ -140,7 +140,7 @@ execution:
     delay: 1000
 
 configuration:
-  table.optimizer.join-reorder-mode: NONE
+  table.optimizer.join-reorder-strategy: NONE
 
 deployment:
   response-timeout: 5000

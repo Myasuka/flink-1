@@ -18,6 +18,7 @@
 
 package org.apache.flink.table.planner.plan.rules.logical;
 
+import org.apache.calcite.rex.RexCall;
 import org.apache.flink.util.Preconditions;
 
 import org.apache.calcite.plan.RelOptRule;
@@ -49,13 +50,33 @@ import java.util.List;
  * The new order of joins are determined with the following steps:
  *
  * <p>1. The inputs related with an equi-join filter (= or IS NOT DISTINCT FROM) will be joined first.
- *       Inputs with smaller indices has higher priority.
+ *       Inputs with smaller indices has higher priority to preserve original join order as mush as it is possible.
  *
  * <p>2. The inputs related with other join filters will then be joined.
  *
- * <p>3. If not all inner join inputs are joined, they will be joined in input order.
+ * <p>3. If not all inner join inputs are joined, they will be cross-joined in input order.
+ * 		 We are unable to eliminate these cross joins.
  *
  * <p>4. Outer joins are added.
+ *
+ * <p>For example, consider the following SQL:
+ * <blockquote><pre><code>
+ *     SELECT * FROM A, B, C, D, E, F, G, H
+ *     WHERE A.f1 = C.f1
+ *     AND C.f2 = D.f2
+ *     AND D.f3 = B.f3
+ *     AND C.f4 = B.f4
+ *     AND E.f5 = G.f5
+ *     AND F.f6 = H.f6
+ *     AND (A.f7 < E.f7 OR B.f8 > G.f8)
+ * </code></pre></blockquote>
+ *
+ * <p>The inputs are joined with the following steps:
+ * <ol>
+ *     <li>Join (A&C, B&C, B&D), (E&G), (F&H) as they are related with an equi-join filter.</li>
+ *     <li>Join ABCD & EG, as there is a non-equal filter between them.</li>
+ *     <li>Join ABCDEG & FH, as all filters are consumed and not all inputs have been joined together.</li>
+ * </ol>
  */
 public class EliminateCrossJoinRule extends RelOptRule {
 
@@ -84,25 +105,7 @@ public class EliminateCrossJoinRule extends RelOptRule {
 				relBuilder.filter(join.getPostJoinFilter());
 			}
 		} else {
-			int outerJoinCount = 0;
-			for (int i = 0; i < join.getInputs().size(); i++) {
-				if (join.getJoinTypes().get(i) != JoinRelType.INNER) {
-					outerJoinCount++;
-				}
-			}
-			Preconditions.checkState(
-				outerJoinCount <= 1,
-				"EliminateCrossJoinRule assumes that there is at most 1 outer join " +
-					"in a layer of multi-join, but " + outerJoinCount + " outer joins were found.");
-			if (outerJoinCount == 1) {
-				int numInputs = join.getInputs().size();
-				Preconditions.checkState(
-					join.getJoinTypes().get(0) == JoinRelType.RIGHT ||
-						join.getJoinTypes().get(numInputs - 1) == JoinRelType.LEFT,
-					"EliminateCrossJoinRule assumes that " +
-						"the only left outer join input must locate at the end, or" +
-						"the only right outer join input must locate at the beginning");
-			}
+			validateOuterJoins(join);
 
 			LoptMultiJoin loptMultiJoin = new LoptMultiJoin(join);
 
@@ -112,8 +115,8 @@ public class EliminateCrossJoinRule extends RelOptRule {
 
 			// apply post-join filters
 			if (join.getPostJoinFilter() != null) {
-				RexBuilder rexBuilder = join.getCluster().getRexBuilder();
-				relBuilder.filter(mapFilter(join.getPostJoinFilter(), mapping, rexBuilder));
+				RexNode adjustedFilter = adjustInputRefsInFilter(join.getPostJoinFilter(), mapping);
+				relBuilder.filter(adjustedFilter);
 			}
 
 			// use projections to keep the output of the join unchanged
@@ -138,19 +141,19 @@ public class EliminateCrossJoinRule extends RelOptRule {
 				} else {
 					// both or none of the filter is an equi-filter
 					// the one with the smallest input wins
-					int a = -1;
-					int b = -1;
+					int leftSetBit = -1;
+					int rightSetBit = -1;
 					do {
-						a = left.inputBitSet.nextSetBit(a + 1);
-						b = right.inputBitSet.nextSetBit(b + 1);
-					} while (a == b && a >= 0);
+						leftSetBit = left.inputBitSet.nextSetBit(leftSetBit + 1);
+						rightSetBit = right.inputBitSet.nextSetBit(rightSetBit + 1);
+					} while (leftSetBit == rightSetBit && leftSetBit >= 0);
 
-					if (a >= 0 && b >= 0) {
-						return a - b;
-					} else if (a < 0 && b < 0) {
+					if (leftSetBit >= 0 && rightSetBit >= 0) {
+						return leftSetBit - rightSetBit;
+					} else if (leftSetBit < 0 && rightSetBit < 0) {
 						return 0;
 					} else {
-						return a;
+						return leftSetBit;
 					}
 				}
 			});
@@ -163,8 +166,40 @@ public class EliminateCrossJoinRule extends RelOptRule {
 		return builder.toJoinVertexTree();
 	}
 
+	private void validateOuterJoins(MultiJoin join) {
+		int outerJoinCount = 0;
+		for (int i = 0; i < join.getInputs().size(); i++) {
+			if (join.getJoinTypes().get(i) != JoinRelType.INNER) {
+				outerJoinCount++;
+			}
+		}
+		Preconditions.checkState(
+			outerJoinCount <= 1,
+			"EliminateCrossJoinRule assumes that there is at most 1 outer join " +
+				"in a layer of multi-join, but " + outerJoinCount + " outer joins were found.");
+		if (outerJoinCount == 1) {
+			int numInputs = join.getInputs().size();
+			Preconditions.checkState(
+				join.getJoinTypes().get(0) == JoinRelType.RIGHT ||
+					join.getJoinTypes().get(numInputs - 1) == JoinRelType.LEFT,
+				"EliminateCrossJoinRule assumes that " +
+					"the only left outer join input must locate at the end, or" +
+					"the only right outer join input must locate at the beginning");
+		}
+	}
+
 	private boolean isEquiFilter(RexNode filter) {
-		return filter.isA(SqlKind.EQUALS) || filter.isA(SqlKind.IS_NOT_DISTINCT_FROM);
+		if (filter.isA(SqlKind.EQUALS) || filter.isA(SqlKind.IS_NOT_DISTINCT_FROM)) {
+			RexCall rexCall = (RexCall) filter;
+			Preconditions.checkState(
+				rexCall.operands.size() == 2,
+				"Expecting EQUALS and IS_NOT_DISTINCT_FROM filters to have exactly 2 inputs, " +
+					"but found " + rexCall.operands.size());
+			RexNode left = rexCall.operands.get(0);
+			RexNode right = rexCall.operands.get(1);
+			return left instanceof RexInputRef && right instanceof RexInputRef;
+		}
+		return false;
 	}
 
 	private static Mappings.TargetMapping joinVertexTreeToJoinRelTree(
@@ -176,7 +211,7 @@ public class EliminateCrossJoinRule extends RelOptRule {
 			int numFields = multiJoin.getNumFieldsInJoinFactor(leaf.smallestInputIdx);
 			int joinStart = multiJoin.getJoinStart(leaf.smallestInputIdx);
 
-			relBuilder.push(leaf.input);
+			relBuilder.push(leaf.input).filter(leaf.filters);
 			return Mappings.createShiftMapping(
 				joinStart + numFields, 0, joinStart, numFields);
 		} else {
@@ -188,11 +223,10 @@ public class EliminateCrossJoinRule extends RelOptRule {
 			Mappings.TargetMapping mergedMapping = mergeMapping(leftMapping, rightMapping);
 			RexBuilder rexBuilder = multiJoin.getMultiJoinRel().getCluster().getRexBuilder();
 
-			RexNode mappedFilter = mapFilter(
-				RexUtil.composeConjunction(rexBuilder, joinVertex.joinFilters, false),
-				mergedMapping,
-				rexBuilder);
-			relBuilder.join(joinVertex.joinType, mappedFilter);
+			RexNode adjustedFilter = adjustInputRefsInFilter(
+				RexUtil.composeConjunction(rexBuilder, joinVertex.filters, false),
+				mergedMapping);
+			relBuilder.join(joinVertex.joinType, adjustedFilter);
 			return mergedMapping;
 		}
 	}
@@ -207,8 +241,8 @@ public class EliminateCrossJoinRule extends RelOptRule {
 		return projects;
 	}
 
-	private static RexNode mapFilter(RexNode filter, Mappings.TargetMapping mapping, RexBuilder rexBuilder) {
-		return filter.accept(new RexInputConverter(rexBuilder, mapping));
+	private static RexNode adjustInputRefsInFilter(RexNode filter, Mappings.TargetMapping mapping) {
+		return filter.accept(new RexInputConverter(mapping));
 	}
 
 	private static Mappings.TargetMapping mergeMapping(Mappings.TargetMapping left, Mappings.TargetMapping right) {
@@ -236,11 +270,19 @@ public class EliminateCrossJoinRule extends RelOptRule {
 		final int numFields;
 		final ImmutableBitSet inputBitSet;
 		final int smallestInputIdx;
+		final List<RexNode> filters;
 
-		Vertex(int numFields, ImmutableBitSet inputBitSet, int smallestInputIdx) {
+		/**
+		 * @param numFields				Total number of input fields in this join tree
+		 * @param inputBitSet			Indices of inputs in this join tree
+		 * @param smallestInputIdx		Smallest input index in this join tree
+		 * @param filters				All filters that can be applied to this join tree
+		 */
+		Vertex(int numFields, ImmutableBitSet inputBitSet, int smallestInputIdx, List<RexNode> filters) {
 			this.numFields = numFields;
 			this.inputBitSet = inputBitSet;
 			this.smallestInputIdx = smallestInputIdx;
+			this.filters = filters;
 		}
 	}
 
@@ -251,7 +293,6 @@ public class EliminateCrossJoinRule extends RelOptRule {
 		final JoinRelType joinType;
 		final Vertex left;
 		final Vertex right;
-		final List<RexNode> joinFilters;
 
 		/**
 		 * @param joinType			Join type of this join vertex (INNER, LEFT, RIGHT or FULL)
@@ -266,11 +307,11 @@ public class EliminateCrossJoinRule extends RelOptRule {
 			List<RexNode> joinFilters) {
 			super(left.numFields + right.numFields,
 				left.inputBitSet.union(right.inputBitSet),
-				Math.min(left.smallestInputIdx, right.smallestInputIdx));
+				Math.min(left.smallestInputIdx, right.smallestInputIdx),
+				joinFilters);
 			this.joinType = joinType;
 			this.left = left;
 			this.right = right;
-			this.joinFilters = joinFilters;
 		}
 	}
 
@@ -283,9 +324,14 @@ public class EliminateCrossJoinRule extends RelOptRule {
 		/**
 		 * @param input				The input
 		 * @param inputIdx			The index of this input in the original multi-join
+		 * @param filters			Filters which can be applied on leaf nodes
 		 */
-		LeafVertex(RelNode input, int inputIdx) {
-			super(input.getRowType().getFieldCount(), ImmutableBitSet.of(inputIdx), inputIdx);
+		LeafVertex(RelNode input, int inputIdx, List<RexNode> filters) {
+			super(
+				input.getRowType().getFieldCount(),
+				ImmutableBitSet.of(inputIdx),
+				inputIdx,
+				filters);
 			this.input = input;
 		}
 	}
@@ -312,14 +358,19 @@ public class EliminateCrossJoinRule extends RelOptRule {
 			for (RexNode rex : rexFilters) {
 				filters.add(new JoinFilter(rex, multiJoin.getFactorsRefByJoinFilter(rex)));
 			}
-			updateBestFilter();
 
 			int numInputs = multiJoin.getNumJoinFactors();
 			this.rootVertex = new Vertex[numInputs];
 			for (int i = 0; i < numInputs; i++) {
 				RelNode input = multiJoin.getJoinFactor(i);
-				rootVertex[i] = new LeafVertex(input, i);
+				// current method to extract filters on input is not efficient (O(n^2) complexity in total),
+				// but as there will not be many filters and this method is easy to write and understand,
+				// we will not optimize it until a bad case in performance really occurs
+				List<RexNode> filtersOnInput = pickJoinFilters(ImmutableBitSet.of(i), filters);
+				rootVertex[i] = new LeafVertex(input, i, filtersOnInput);
 			}
+
+			updateBestFilter();
 		}
 
 		/**
@@ -460,18 +511,16 @@ public class EliminateCrossJoinRule extends RelOptRule {
 	 * Simple converter which converts input refs to a new index according to a {@link Mappings.TargetMapping}.
 	 */
 	private static class RexInputConverter extends RexShuttle {
-		private RexBuilder rexBuilder;
 		private Mappings.TargetMapping mapping;
 
-		RexInputConverter(RexBuilder rexBuilder, Mappings.TargetMapping mapping) {
-			this.rexBuilder = rexBuilder;
+		RexInputConverter(Mappings.TargetMapping mapping) {
 			this.mapping = mapping;
 		}
 
 		@Override
-		public RexNode visitInputRef(RexInputRef var) {
-			int target = mapping.getTargetOpt(var.getIndex());
-			return rexBuilder.makeInputRef(var.getType(), target);
+		public RexNode visitInputRef(RexInputRef ref) {
+			int target = mapping.getTargetOpt(ref.getIndex());
+			return new RexInputRef(target, ref.getType());
 		}
 	}
 }
