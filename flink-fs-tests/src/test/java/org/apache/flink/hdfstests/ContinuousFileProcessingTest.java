@@ -949,12 +949,6 @@ public class ContinuousFileProcessingTest {
 			new OneInputStreamOperatorTestHarness<>(restoredReader);
 		restoredTestInstance.setTimeCharacteristic(TimeCharacteristic.EventTime);
 
-		//Remove a path and the job should continue
-		org.apache.hadoop.fs.Path fileDelete = filesCreated.iterator().next();
-		Assert.assertTrue(hdfs.exists(fileDelete));
-		hdfs.delete(fileDelete, false);
-		Assert.assertFalse(hdfs.exists(fileDelete));
-
 		restoredTestInstance.initializeState(snapshot);
 		restoredTestInstance.open();
 
@@ -964,11 +958,18 @@ public class ContinuousFileProcessingTest {
 			initTestInstance.close();
 		}
 
+		Assert.assertEquals(initTestInstance.getOutput().size(), NO_OF_FILES * LINES_PER_FILE + 1);
+
+		//Remove a path and the job should continue
+		org.apache.hadoop.fs.Path fileDelete = filesCreated.iterator().next();
+		Assert.assertTrue(hdfs.exists(fileDelete));
+		hdfs.delete(fileDelete, false);
+		Assert.assertFalse(hdfs.exists(fileDelete));
+
 		synchronized (restoredTestInstance.getCheckpointLock()) {
 			restoredTestInstance.close();
 		}
 
-		Assert.assertEquals(initTestInstance.getOutput().size(), NO_OF_FILES * LINES_PER_FILE + 1);
 		Assert.assertEquals(restoredTestInstance.getOutput().size(), NO_OF_FILES * LINES_PER_FILE  + 1);
 	}
 
