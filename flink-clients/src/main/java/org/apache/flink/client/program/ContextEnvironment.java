@@ -85,7 +85,7 @@ public class ContextEnvironment extends ExecutionEnvironment {
 				getParallelism());
 
 		jobGraph.addJars(this.jarFilesToAttach);
-		jobGraph.setClasspaths(this.classpathsToAttach);
+		jobGraph.addClasspaths(this.classpathsToAttach);
 
 		if (detached) {
 			lastJobExecutionResult = ClientUtils.submitJob(client, jobGraph);

@@ -180,7 +180,7 @@ public class ClientTest extends TestLogger {
 				1);
 
 		jobGraph.addJars(Collections.emptyList());
-		jobGraph.setClasspaths(Collections.emptyList());
+		jobGraph.addClasspaths(Collections.emptyList());
 
 		JobSubmissionResult result = ClientUtils.submitJob(clusterClient, jobGraph);
 		assertNotNull(result);

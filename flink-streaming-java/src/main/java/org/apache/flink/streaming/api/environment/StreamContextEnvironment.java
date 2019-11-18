@@ -52,7 +52,7 @@ public class StreamContextEnvironment extends StreamExecutionEnvironment {
 				getParallelism());
 
 		jobGraph.addJars(ctx.getJars());
-		jobGraph.setClasspaths(ctx.getClasspaths());
+		jobGraph.addClasspaths(ctx.getClasspaths());
 
 		// running from the CLI will override the savepoint restore settings
 		jobGraph.setSavepointRestoreSettings(ctx.getSavepointRestoreSettings());
