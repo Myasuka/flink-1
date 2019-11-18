@@ -66,7 +66,7 @@ import static org.apache.flink.table.utils.TableConnectorUtils.generateRuntimeNa
  */
 public class HiveTableSource implements StreamTableSource<Row>, PartitionableTableSource, ProjectableTableSource<Row> {
 
-	private static Logger logger = LoggerFactory.getLogger(HiveTableSource.class);
+	private static Logger LOG = LoggerFactory.getLogger(HiveTableSource.class);
 
 	private final JobConf jobConf;
 	private final ObjectPath tablePath;
@@ -129,7 +129,13 @@ public class HiveTableSource implements StreamTableSource<Row>, PartitionableTab
 			int max = conf.getInteger(TABLE_EXEC_HIVE_INFER_SOURCE_PARALLELISM_MAX);
 			int splitNum;
 			try {
+				long nano1 = System.nanoTime();
 				splitNum = inputFormat.createInputSplits(0).length;
+				long nano2 = System.nanoTime();
+				LOG.info(
+						"Hive source({}}) createInputSplits use time: {} ms",
+						tablePath,
+						(nano2 - nano1) / 1000_000);
 			} catch (IOException e) {
 				throw new FlinkHiveException(e);
 			}
