@@ -271,7 +271,7 @@ public class ExecutionContextTest {
 		assertEquals(
 			"COST_BASED",
 			tableEnv.getConfig().getConfiguration().getString(
-				OptimizerConfigOptions.TABLE_OPTIMIZER_JOIN_REORDER_MODE));
+				OptimizerConfigOptions.TABLE_OPTIMIZER_JOIN_REORDER_STRATEGY));
 
 		// these options are not modified and should be equal to their default value
 		assertEquals(

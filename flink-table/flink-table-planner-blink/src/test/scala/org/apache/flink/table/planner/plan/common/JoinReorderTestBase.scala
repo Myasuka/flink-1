@@ -70,7 +70,7 @@ abstract class JoinReorderTestBase extends TableTestBase {
       ))).build())
 
     util.getTableEnv.getConfig.getConfiguration.setString(
-      OptimizerConfigOptions.TABLE_OPTIMIZER_JOIN_REORDER_MODE, "COST_BASED")
+      OptimizerConfigOptions.TABLE_OPTIMIZER_JOIN_REORDER_STRATEGY, "COST_BASED")
   }
 
   @Test

@@ -238,7 +238,7 @@ execution:
 # A full list of options and their default values can be found
 # on the dedicated "Configuration" page.
 configuration:
-  table.optimizer.join-reorder-mode: COST_BASED
+  table.optimizer.join-reorder-strategy: COST_BASED
   table.exec.spill-compression.enabled: true
   table.exec.spill-compression.block-size: 128kb
 

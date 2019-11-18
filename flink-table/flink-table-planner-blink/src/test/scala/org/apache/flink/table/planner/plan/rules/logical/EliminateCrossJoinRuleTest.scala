@@ -275,7 +275,7 @@ class EliminateCrossJoinRuleTest extends TableTestBase {
   }
 
   @Test
-  def testNonEquiConditions(): Unit = {
+  def testNonEquiFilters(): Unit = {
     util.verifyPlan(
       """
         |SELECT * FROM T1, T2, T3, T4
@@ -304,7 +304,7 @@ class EliminateCrossJoinRuleTest extends TableTestBase {
   }
 
   @Test
-  def testLongJoinCondition(): Unit = {
+  def testLongJoinFilter(): Unit = {
     util.verifyPlan(
       """
         |SELECT * FROM T1, T2, T3, T4, T5, T6
@@ -315,6 +315,39 @@ class EliminateCrossJoinRuleTest extends TableTestBase {
         |  AND b2 = b6
         |  AND (b6 < b1 OR a1 > a5 OR b4 > b6)
         |  AND (c3 < c6 OR a1 > a6 OR d4 < d3)
+        |""".stripMargin
+    )
+  }
+
+  @Test
+  def testConstantFilter(): Unit = {
+    // this join ought to be pruned by other rules,
+    // we create this test only for corner case checking
+    util.verifyPlan(
+      """
+        |SELECT * FROM T1
+        |  INNER JOIN T2 ON a1 = a2 AND 5 < 3
+        |""".stripMargin
+    )
+  }
+
+  @Test
+  def testOneInputFilter(): Unit = {
+    util.verifyPlan(
+      """
+        |SELECT * FROM T1
+        |  INNER JOIN T2 ON a1 = 1
+        |""".stripMargin
+    )
+  }
+
+  @Test
+  def testTwoInputRefsOnSameSide(): Unit = {
+    util.verifyPlan(
+      """
+        |SELECT * FROM T1, T2, T3
+        |  WHERE a1 + a2 = 1
+        |  AND b2 = b3
         |""".stripMargin
     )
   }

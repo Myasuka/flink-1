@@ -83,7 +83,7 @@ public class EnvironmentTest {
 		assertEquals(16, merged.getExecution().getMaxParallelism());
 
 		final Map<String, String> configuration = new HashMap<>();
-		configuration.put("table.optimizer.join-reorder-mode", "COST_BASED");
+		configuration.put("table.optimizer.join-reorder-strategy", "COST_BASED");
 
 		assertEquals(configuration, merged.getConfiguration().asMap());
 	}
